@@ -12,6 +12,7 @@ import os
 from datetime import datetime, timezone
 
 from .alpaca import Alpaca, AlpacaError
+from .auditor import Auditor
 from .brain import Brain
 from .config import Config
 
@@ -47,6 +48,7 @@ class Engine:
         self.cfg = cfg
         self.alpaca = Alpaca(cfg)
         self.brain = Brain(cfg)
+        self.auditor = Auditor(cfg)
 
     # ---- capital cap -----------------------------------------------------
     def effective_funds(self, account: dict, positions: list[dict]) -> tuple[float, float, float]:
@@ -248,6 +250,40 @@ class Engine:
             checked.append(o)
         return checked
 
+    # ---- independent audit ----------------------------------------------
+    def run_audit(self, memo: str, context: str, checked: list[dict]) -> dict | None:
+        """Have the second AI review the approved orders; veto the unjustified.
+
+        Mutates `checked` in place (approved -> vetoed where the auditor objects)
+        and returns the audit record for the dashboard, or None if disabled/no
+        orders. Fails open on error: the hard risk limits already applied, so a
+        transient auditor outage should not silently block a validated trade.
+        """
+        to_audit = [o for o in checked if o["status"] == "approved"]
+        if not self.cfg.enable_auditor or not to_audit:
+            return None
+        try:
+            audit = self.auditor.audit(memo, context, to_audit)
+        except Exception as e:  # fail open, but record that the audit is missing
+            print(f"[engine] auditor unavailable: {e}")
+            return {"verdict": "unavailable", "transparency_score": None,
+                    "summary": f"Independent audit could not run this cycle ({e}).",
+                    "order_reviews": []}
+
+        reviews = {r.get("index"): r for r in audit.get("order_reviews", [])}
+        reject_all = audit.get("verdict") == "reject"
+        vetoed = 0
+        for i, o in enumerate(to_audit):
+            r = reviews.get(i)
+            if reject_all or (r and r.get("decision") == "veto"):
+                o["status"] = "vetoed"
+                reason = (r.get("reason") if r else None) or "auditor rejected the cycle"
+                _add_detail(o, f"auditor veto: {reason}")
+                vetoed += 1
+        print(f"[engine] auditor verdict={audit.get('verdict')} "
+              f"transparency={audit.get('transparency_score')} vetoed={vetoed}")
+        return audit
+
     # ---- execution -------------------------------------------------------
     def execute(self, checked: list[dict], market_open: bool, force: bool) -> None:
         # In live mode with approval required, we never auto-send: orders are
@@ -286,7 +322,7 @@ class Engine:
     # ---- state files -----------------------------------------------------
     def write_state(
         self, account: dict, positions: list[dict], memo: str, plan: dict,
-        checked: list[dict], market_open: bool,
+        checked: list[dict], market_open: bool, audit: dict | None = None,
     ) -> dict:
         os.makedirs(DATA_DIR, exist_ok=True)
         now = datetime.now(timezone.utc).isoformat()
@@ -328,6 +364,7 @@ class Engine:
             "market_summary": plan.get("market_summary", ""),
             "memo": memo,
             "orders": checked,
+            "audit": audit,
         }
         with open(STATE_PATH, "w") as f:
             json.dump(state, f, indent=2)
@@ -366,6 +403,11 @@ class Engine:
         print(f"[engine] AI proposed {len(raw_orders)} order(s)")
 
         checked = self.risk_check(raw_orders, account, positions)
+
+        # Independent second AI reviews what would actually be traded and can
+        # veto orders that aren't honestly justified (the anti-black-box gate).
+        audit = self.run_audit(memo, context, checked)
+
         self.execute(checked, market_open, force)
         for o in checked:
             print(f"  - {o['side']} {o['symbol']} ${o['notional_usd']:,.0f} "
@@ -380,6 +422,6 @@ class Engine:
             except AlpacaError:
                 pass
 
-        state = self.write_state(account, positions, memo, plan, checked, market_open)
+        state = self.write_state(account, positions, memo, plan, checked, market_open, audit)
         print("[engine] wrote docs/data/state.json")
         return state

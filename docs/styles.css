@@ -192,8 +192,13 @@ main {
 .status { font-size: 12px; font-weight: 600; }
 .status-executed { color: var(--pos); }
 .status-proposed { color: var(--warn); }
-.status-rejected, .status-error { color: var(--neg); }
+.status-rejected, .status-error, .status-vetoed { color: var(--neg); }
 .status-dry_run, .status-deferred, .status-pending, .status-approved { color: var(--text-muted); }
+
+.pill.audit-approve { background: var(--pos-weak); color: var(--pos); }
+.pill.audit-flag { background: var(--accent-weak); color: var(--warn); }
+.pill.audit-reject { background: var(--neg-weak); color: var(--neg); }
+.pill.audit-unavailable { background: var(--surface-2); color: var(--text-muted); }
 
 .pos { color: var(--pos); }
 .neg { color: var(--neg); }

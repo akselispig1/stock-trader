@@ -163,6 +163,7 @@ All optional — set these as repo **Variables** (not secrets). Defaults are in
 | `CAPITAL_CURRENCY` | `CHF` | Label for the cap on the dashboard (the Alpaca account itself is USD) |
 | `CLAUDE_MODEL` | `claude-opus-5` | The AI model. `claude-sonnet-5` is ~60% cheaper; `claude-haiku-4-5` cheapest (no web search) |
 | `ENABLE_WEB_SEARCH` | `true` | Let the AI search the web for live news/sentiment |
+| `ENABLE_AUDITOR` | `true` | A second, independent AI audits every trade before it runs and can veto unjustified ones |
 | `WATCHLIST` | 10 large-caps | Comma-separated tickers the AI may trade, e.g. `AAPL,MSFT,SPY` |
 | `MAX_ORDERS_PER_RUN` | `4` | Cap on trades per cycle |
 | `MAX_NOTIONAL_PER_ORDER` | `1000` | Max dollars per single order |
@@ -199,6 +200,38 @@ docs/           the GitHub Pages dashboard (index.html, app.js, styles.css)
   data/         state.json + history.jsonl, written by the bot each run
 .github/workflows/trader.yml   the scheduled/on-demand brain
 ```
+
+## Two AIs: a manager and an independent auditor (why this isn't a black box)
+
+A common and fair criticism of "AI trading apps" is that they're black boxes —
+you get a buy/sell signal with no way to know if there's real reasoning behind
+it or just a technical indicator dressed up in AI marketing. This project is
+built to be the opposite:
+
+1. **The manager AI** researches (with live web search) and writes a full,
+   readable **research memo** arguing each decision — shown in full on the
+   dashboard.
+2. **The auditor AI** is a *separate* Claude call with a skeptical,
+   owner-protecting mandate. Before any trade executes, it checks that each
+   order is genuinely justified by the manager's memo — not hype-chasing, not
+   vague hand-waving, not contradicting the memo's own risk points — and can
+   **veto** anything that doesn't hold up (or reject the whole cycle). Its
+   plain-English verdict and a transparency score appear on the dashboard.
+
+So every trade has two things a scam can't offer: a visible argument, and an
+independent second opinion that can say no. On top of that:
+
+- **Open source** — every line is in this repo; nothing hidden.
+- **Self-custody** — it's *your* Alpaca account and *your* API keys. No third
+  party holds your money or takes a cut.
+- **Hard limits in code** — the risk guardrails are enforced in Python,
+  independent of both AIs, and can't be exceeded.
+- **No promises** — paper-first, and it can absolutely be wrong. Not advice.
+
+> On unprecedented events: no AI can *predict* a panic or geopolitical shock —
+> it's trained on history. The design goal is to **fail safe** (preserve capital,
+> stay diversified, keep a cash reserve, defer to you when unsure), not to claim
+> foresight it doesn't have.
 
 ## Safety notes
 

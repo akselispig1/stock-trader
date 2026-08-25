@@ -51,6 +51,7 @@ async function loadState() {
   renderAccount(STATE.account);
   renderMarketState(STATE.market_open);
   renderDecision(STATE);
+  renderAudit(STATE.audit);
   renderPositions(STATE.positions, "from last bot run");
   renderConfig(STATE.config);
   $("updated-line").innerHTML = STATE.updated_at
@@ -147,6 +148,23 @@ function renderDecision(s) {
   document.querySelectorAll(".approve-btn").forEach((b) =>
     b.addEventListener("click", () => approveOrder(b))
   );
+}
+
+function renderAudit(audit) {
+  const card = $("audit-card");
+  if (!audit) { card.style.display = "none"; return; }
+  card.style.display = "";
+  const verdict = audit.verdict || "flag";
+  const pill = $("audit-verdict");
+  const label = {
+    approve: "✓ Approved", flag: "⚠ Flagged", reject: "✗ Rejected", unavailable: "— Unavailable",
+  }[verdict] || verdict;
+  pill.textContent = label;
+  pill.className = "pill audit-" + verdict;
+  $("audit-summary").textContent = audit.summary || "";
+  const ts = audit.transparency_score;
+  $("audit-transparency").textContent =
+    ts != null ? `Transparency score: ${Math.round(ts * 100)}%` : "";
 }
 
 function renderPositions(positions, source) {

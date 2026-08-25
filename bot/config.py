@@ -76,6 +76,9 @@ class Config:
     # --- The AI ---
     model: str = field(default_factory=lambda: os.getenv("CLAUDE_MODEL", "claude-opus-5").strip())
     enable_web_search: bool = field(default_factory=lambda: _bool("ENABLE_WEB_SEARCH", True))
+    # A second, independent AI that audits the trader AI's decisions before they
+    # execute and can veto trades that aren't clearly justified (anti-black-box).
+    enable_auditor: bool = field(default_factory=lambda: _bool("ENABLE_AUDITOR", True))
 
     # --- Universe ---
     watchlist: list[str] = field(
@@ -139,6 +142,7 @@ class Config:
             "live_require_approval": self.live_require_approval,
             "capital_cap": self.capital_cap,
             "capital_currency": self.capital_currency,
+            "enable_auditor": self.enable_auditor,
             "risk": {
                 "max_orders_per_run": self.max_orders_per_run,
                 "max_notional_per_order": self.max_notional_per_order,

@@ -51,6 +51,8 @@ jobs:
           LIVE_REQUIRE_APPROVAL: ${{ vars.LIVE_REQUIRE_APPROVAL || 'true' }}
           CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL || 'claude-opus-5' }}
           ENABLE_WEB_SEARCH: ${{ vars.ENABLE_WEB_SEARCH || 'true' }}
+          # Second, independent AI that audits trades before they run (anti-black-box).
+          ENABLE_AUDITOR: ${{ vars.ENABLE_AUDITOR || 'true' }}
           # Capital cap: bot behaves as if it holds only this much (default 1000).
           CAPITAL_CAP: ${{ vars.CAPITAL_CAP || '1000' }}
           CAPITAL_CURRENCY: ${{ vars.CAPITAL_CURRENCY || 'CHF' }}
