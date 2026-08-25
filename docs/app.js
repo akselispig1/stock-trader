@@ -77,17 +77,38 @@ function renderMode(mode) {
   badge.className = "badge " + (live ? "badge-live" : "badge-paper");
 }
 
+function setStat(id, label, value) {
+  const card = $(id).closest(".stat");
+  if (card) card.querySelector(".stat-label").textContent = label;
+  $(id).textContent = value;
+}
+
 function renderAccount(a) {
   if (!a) return;
-  $("stat-equity").textContent = money(a.equity);
-  $("stat-cash").textContent = money(a.cash);
-  $("stat-bp").textContent = money(a.buying_power);
+  const daypl = $("stat-daypl");
+
+  if (a.capital_cap) {
+    // Capped mode: show the managed budget rather than the full paper balance.
+    const invested = a.invested || 0;
+    const cash = a.effective_cash != null ? a.effective_cash : a.cash || 0;
+    const openPl = (STATE?.positions || []).reduce((s, p) => s + (Number(p.unrealized_pl) || 0), 0);
+    setStat("stat-equity", `Budget (${a.capital_currency || "cap"})`, money(a.capital_cap));
+    setStat("stat-bp", "Invested", money(invested));
+    setStat("stat-cash", "Available", money(cash));
+    setStat("stat-daypl", "Open P&L", money(openPl));
+    daypl.classList.toggle("pos", openPl >= 0);
+    daypl.classList.toggle("neg", openPl < 0);
+    return;
+  }
+
+  setStat("stat-equity", "Equity", money(a.equity));
+  setStat("stat-cash", "Cash", money(a.cash));
+  setStat("stat-bp", "Buying power", money(a.buying_power));
   const dayPl = (a.equity || 0) - (a.last_equity || 0);
-  const el = $("stat-daypl");
   const pctVal = a.last_equity ? (dayPl / a.last_equity) * 100 : 0;
-  el.textContent = `${money(dayPl)} (${pct(pctVal)})`;
-  el.classList.toggle("pos", dayPl >= 0);
-  el.classList.toggle("neg", dayPl < 0);
+  setStat("stat-daypl", "Day P&L", `${money(dayPl)} (${pct(pctVal)})`);
+  daypl.classList.toggle("pos", dayPl >= 0);
+  daypl.classList.toggle("neg", dayPl < 0);
 }
 
 function renderMarketState(open) {
@@ -153,6 +174,7 @@ function renderConfig(c) {
   const r = c.risk || {};
   const items = [
     ["Trading mode", c.trading_mode],
+    ["Capital cap", c.capital_cap ? `${c.capital_cap.toLocaleString()} ${c.capital_currency || ""}`.trim() : "off (full account)"],
     ["AI model", c.model],
     ["Web search", c.enable_web_search ? "on" : "off"],
     ["Watchlist", (c.watchlist || []).join(", ") || "—"],

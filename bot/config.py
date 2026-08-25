@@ -36,6 +36,18 @@ def _int(name: str, default: int) -> int:
     return int(_float(name, default))
 
 
+def _opt_float(name: str, default: float | None) -> float | None:
+    """Like _float, but a value of 0 (or negative) means 'disabled' -> None."""
+    raw = os.getenv(name)
+    if raw is None or raw == "":
+        return default
+    try:
+        v = float(raw)
+    except ValueError:
+        return default
+    return v if v > 0 else None
+
+
 def _list(name: str, default: list[str]) -> list[str]:
     raw = os.getenv(name)
     if not raw:
@@ -72,6 +84,14 @@ class Config:
             ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA", "AMD", "SPY", "QQQ"],
         )
     )
+
+    # --- Capital cap ---
+    # The bot behaves as if it only has this much money, regardless of the real
+    # (much larger) paper balance. Sizing and risk are computed against it. Set
+    # CAPITAL_CAP=0 to disable and use the full account. Currency is a label only
+    # (the Alpaca account is USD-denominated).
+    capital_cap: float | None = field(default_factory=lambda: _opt_float("CAPITAL_CAP", 1000.0))
+    capital_currency: str = field(default_factory=lambda: os.getenv("CAPITAL_CURRENCY", "CHF").strip() or "CHF")
 
     # --- Risk limits ---
     max_orders_per_run: int = field(default_factory=lambda: _int("MAX_ORDERS_PER_RUN", 4))
@@ -117,6 +137,8 @@ class Config:
             "watchlist": self.watchlist,
             "dry_run": self.dry_run,
             "live_require_approval": self.live_require_approval,
+            "capital_cap": self.capital_cap,
+            "capital_currency": self.capital_currency,
             "risk": {
                 "max_orders_per_run": self.max_orders_per_run,
                 "max_notional_per_order": self.max_notional_per_order,

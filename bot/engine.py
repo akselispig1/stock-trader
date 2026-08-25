@@ -48,24 +48,53 @@ class Engine:
         self.alpaca = Alpaca(cfg)
         self.brain = Brain(cfg)
 
+    # ---- capital cap -----------------------------------------------------
+    def effective_funds(self, account: dict, positions: list[dict]) -> tuple[float, float, float]:
+        """Return (equity, cash, invested) the bot should size against.
+
+        With a capital cap the bot behaves as if it holds only `capital_cap`,
+        no matter how large the real paper balance is: equity is the cap,
+        available cash is the cap minus what's already invested, and neither
+        exceeds the real account's actual figures.
+        """
+        real_equity = _f(account.get("equity"))
+        real_cash = _f(account.get("cash"))
+        invested_real = sum(abs(_f(p.get("market_value"))) for p in positions)
+        cap = self.cfg.capital_cap
+        if cap is None:
+            return real_equity, real_cash, invested_real
+        eff_equity = min(real_equity, cap)
+        invested = min(invested_real, cap)
+        eff_cash = max(0.0, min(real_cash, cap - invested))
+        return eff_equity, eff_cash, invested
+
     # ---- context building -----------------------------------------------
     def build_context(self) -> tuple[str, dict, list[dict]]:
         account = self.alpaca.account()
         positions = self.alpaca.positions()
 
-        equity = _f(account.get("equity"))
-        cash = _f(account.get("cash"))
-        buying_power = _f(account.get("buying_power"))
+        equity, cash, invested = self.effective_funds(account, positions)
+        cap = self.cfg.capital_cap
 
         lines = [
             f"MODE: {self.cfg.trading_mode.upper()} (fake money)"
             if not self.cfg.is_live
             else "MODE: LIVE (REAL money)",
-            f"Account equity: ${equity:,.2f}",
-            f"Cash: ${cash:,.2f} | Buying power: ${buying_power:,.2f}",
-            "",
-            "CURRENT POSITIONS:",
         ]
+        if cap is not None:
+            lines += [
+                f"MANAGED BUDGET: {cap:,.0f} {self.cfg.capital_currency} — you must keep "
+                f"TOTAL invested within this budget. Size every position accordingly.",
+                f"Invested so far: ${invested:,.2f} | Available to invest: ${cash:,.2f}",
+                f"(Underlying paper account equity is ${_f(account.get('equity')):,.2f}, "
+                f"but treat {cap:,.0f} {self.cfg.capital_currency} as your entire capital.)",
+            ]
+        else:
+            lines += [
+                f"Account equity: ${equity:,.2f}",
+                f"Cash: ${cash:,.2f} | Buying power: ${_f(account.get('buying_power')):,.2f}",
+            ]
+        lines += ["", "CURRENT POSITIONS:"]
         if positions:
             for p in positions:
                 lines.append(
@@ -112,8 +141,8 @@ class Engine:
     def risk_check(
         self, orders: list[dict], account: dict, positions: list[dict]
     ) -> list[dict]:
-        equity = _f(account.get("equity"))
-        cash = _f(account.get("cash"))
+        # Size against the capital cap (if set), not the full paper balance.
+        equity, cash, _invested = self.effective_funds(account, positions)
         pos_by_sym = {p["symbol"]: p for p in positions}
         cash_floor = equity * (self.cfg.min_cash_reserve_pct / 100.0)
         max_alloc = equity * (self.cfg.max_allocation_pct_per_symbol / 100.0)
@@ -262,6 +291,10 @@ class Engine:
         os.makedirs(DATA_DIR, exist_ok=True)
         now = datetime.now(timezone.utc).isoformat()
         equity = _f(account.get("equity"))
+        eff_equity, eff_cash, invested = self.effective_funds(account, positions)
+        # When a cap is set, the equity curve should track the managed book
+        # (invested + available), not the untouched six-figure paper balance.
+        book_equity = invested + eff_cash if self.cfg.capital_cap is not None else equity
 
         state = {
             "updated_at": now,
@@ -273,6 +306,12 @@ class Engine:
                 "buying_power": _f(account.get("buying_power")),
                 "portfolio_value": _f(account.get("portfolio_value")),
                 "last_equity": _f(account.get("last_equity")),
+                "capital_cap": self.cfg.capital_cap,
+                "capital_currency": self.cfg.capital_currency,
+                "effective_equity": eff_equity,
+                "effective_cash": eff_cash,
+                "invested": invested,
+                "book_equity": book_equity,
             },
             "positions": [
                 {
@@ -295,8 +334,8 @@ class Engine:
 
         history_row = {
             "t": now,
-            "equity": equity,
-            "cash": _f(account.get("cash")),
+            "equity": book_equity,
+            "cash": eff_cash,
             "n_orders": sum(1 for o in checked if o["status"] in ("executed", "proposed", "dry_run")),
             "summary": plan.get("market_summary", "")[:280],
         }

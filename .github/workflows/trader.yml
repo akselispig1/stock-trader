@@ -51,6 +51,9 @@ jobs:
           LIVE_REQUIRE_APPROVAL: ${{ vars.LIVE_REQUIRE_APPROVAL || 'true' }}
           CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL || 'claude-opus-5' }}
           ENABLE_WEB_SEARCH: ${{ vars.ENABLE_WEB_SEARCH || 'true' }}
+          # Capital cap: bot behaves as if it holds only this much (default 1000).
+          CAPITAL_CAP: ${{ vars.CAPITAL_CAP || '1000' }}
+          CAPITAL_CURRENCY: ${{ vars.CAPITAL_CURRENCY || 'CHF' }}
           WATCHLIST: ${{ vars.WATCHLIST }}
           MAX_ORDERS_PER_RUN: ${{ vars.MAX_ORDERS_PER_RUN }}
           MAX_NOTIONAL_PER_ORDER: ${{ vars.MAX_NOTIONAL_PER_ORDER }}
