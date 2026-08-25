@@ -37,6 +37,11 @@ def _pct(bars: list[dict]) -> float | None:
     return (last - first) / first * 100.0
 
 
+def _add_detail(o: dict, msg: str) -> None:
+    """Append a human-readable note to an order's `detail` field."""
+    o["detail"] = f"{o['detail']}; {msg}" if o.get("detail") else msg
+
+
 class Engine:
     def __init__(self, cfg: Config):
         self.cfg = cfg
@@ -113,9 +118,20 @@ class Engine:
         cash_floor = equity * (self.cfg.min_cash_reserve_pct / 100.0)
         max_alloc = equity * (self.cfg.max_allocation_pct_per_symbol / 100.0)
 
-        checked: list[dict] = []
+        # Running state, updated as each order is APPROVED within this run, so
+        # multiple orders in the same cycle can't collectively breach a limit.
+        # `exposure` starts from the current position market values. Cash is
+        # tracked conservatively: buys reduce it, but sell proceeds are NOT
+        # credited toward same-run buys (a sell may end up deferred, or only
+        # human-approved in live mode, so its cash isn't guaranteed to arrive).
+        exposure = {
+            sym: abs(_f(p.get("market_value"))) for sym, p in pos_by_sym.items()
+        }
         projected_cash = cash
-        for order in orders[: self.cfg.max_orders_per_run]:
+        approved_count = 0
+
+        checked: list[dict] = []
+        for order in orders:
             symbol = str(order.get("symbol", "")).upper()
             side = str(order.get("side", "")).lower()
             notional = round(abs(_f(order.get("notional_usd"))), 2)
@@ -143,13 +159,18 @@ class Engine:
             if side == "buy" and symbol not in self.cfg.watchlist:
                 reject("buy not on watchlist")
                 continue
+            # Count only orders that make it through validation toward the cap,
+            # so a batch of rejects can't crowd out valid trades.
+            if approved_count >= self.cfg.max_orders_per_run:
+                reject(f"max {self.cfg.max_orders_per_run} orders/run reached")
+                continue
             if notional > self.cfg.max_notional_per_order:
                 notional = self.cfg.max_notional_per_order
                 o["notional_usd"] = notional
-                o["detail"] = f"capped to ${notional:,.0f} per-order limit"
+                _add_detail(o, f"capped to ${notional:,.0f} per-order limit")
 
             if side == "buy":
-                held = _f(pos_by_sym.get(symbol, {}).get("market_value"))
+                held = exposure.get(symbol, 0.0)
                 if held + notional > max_alloc:
                     room = max(0.0, max_alloc - held)
                     if room < 1:
@@ -157,9 +178,7 @@ class Engine:
                         continue
                     notional = round(room, 2)
                     o["notional_usd"] = notional
-                    o["detail"] = (f"{o['detail']}; " if o["detail"] else "") + (
-                        f"trimmed to allocation cap (${notional:,.0f})"
-                    )
+                    _add_detail(o, f"trimmed to allocation cap (${notional:,.0f})")
                 if projected_cash - notional < cash_floor:
                     reject(
                         f"would breach ${cash_floor:,.0f} cash reserve "
@@ -167,24 +186,36 @@ class Engine:
                     )
                     continue
                 projected_cash -= notional
-            else:  # sell
-                if symbol not in pos_by_sym:
-                    if self.cfg.allow_short:
-                        pass
-                    else:
-                        reject("sell but no position held (shorting disabled)")
+                exposure[symbol] = held + notional
+            elif symbol in pos_by_sym:  # sell an existing long position
+                held_val = abs(_f(pos_by_sym[symbol].get("market_value")))
+                held_qty = abs(_f(pos_by_sym[symbol].get("qty")))
+                if notional >= held_val:
+                    # Full exit: close by exact share qty so price drift between
+                    # now and fill can't leave a dust position behind.
+                    notional = round(held_val, 2)
+                    o["notional_usd"] = notional
+                    o["qty"] = held_qty
+                    _add_detail(o, "closing full position")
+                exposure[symbol] = max(0.0, exposure.get(symbol, 0.0) - notional)
+            else:  # sell with no position held
+                if not self.cfg.allow_short:
+                    reject("sell but no position held (shorting disabled)")
+                    continue
+                # Short: apply the same per-symbol allocation cap to short size.
+                held = exposure.get(symbol, 0.0)
+                if held + notional > max_alloc:
+                    room = max(0.0, max_alloc - held)
+                    if room < 1:
+                        reject(f"{symbol} short already at allocation cap")
                         continue
-                else:
-                    held = _f(pos_by_sym[symbol].get("market_value"))
-                    if notional > held:
-                        notional = round(held, 2)
-                        o["notional_usd"] = notional
-                        o["detail"] = (f"{o['detail']}; " if o["detail"] else "") + (
-                            "capped to position size"
-                        )
-                    projected_cash += notional
+                    notional = round(room, 2)
+                    o["notional_usd"] = notional
+                    _add_detail(o, f"short trimmed to allocation cap (${notional:,.0f})")
+                exposure[symbol] = held + notional
 
             o["status"] = "approved"
+            approved_count += 1
             checked.append(o)
         return checked
 
@@ -199,25 +230,26 @@ class Engine:
                 continue
             if self.cfg.dry_run:
                 o["status"] = "dry_run"
-                o["detail"] = (f"{o['detail']}; " if o["detail"] else "") + "dry run - not sent"
+                _add_detail(o, "dry run - not sent")
                 continue
             if live_hold:
                 o["status"] = "proposed"
-                o["detail"] = (f"{o['detail']}; " if o["detail"] else "") + "awaiting approval (live)"
+                _add_detail(o, "awaiting approval (live)")
                 continue
             if not market_open and not force:
                 o["status"] = "deferred"
-                o["detail"] = (f"{o['detail']}; " if o["detail"] else "") + "market closed - not sent"
+                _add_detail(o, "market closed - not sent")
                 continue
             try:
-                res = self.alpaca.submit_order(
-                    o["symbol"], o["side"], notional=o["notional_usd"]
-                )
+                if o.get("qty"):  # full-position exit: send exact share qty
+                    res = self.alpaca.submit_order(o["symbol"], o["side"], qty=o["qty"])
+                else:
+                    res = self.alpaca.submit_order(
+                        o["symbol"], o["side"], notional=o["notional_usd"]
+                    )
                 o["status"] = "executed"
                 o["order_id"] = res.get("id")
-                o["detail"] = (f"{o['detail']}; " if o["detail"] else "") + (
-                    f"submitted ({res.get('status', 'accepted')})"
-                )
+                _add_detail(o, f"submitted ({res.get('status', 'accepted')})")
             except AlpacaError as e:
                 o["status"] = "error"
                 o["detail"] = str(e)[:200]

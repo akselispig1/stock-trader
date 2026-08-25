@@ -17,9 +17,12 @@ let STATE = null; // the loaded state.json
 
 /* ---------- helpers ---------- */
 const $ = (id) => document.getElementById(id);
-const money = (n) =>
-  (n < 0 ? "-$" : "$") +
-  Math.abs(Number(n) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const money = (n) => {
+  // Round to cents first so a tiny negative (e.g. -0.003) doesn't render "-$0.00".
+  const cents = Math.round((Number(n) || 0) * 100) / 100;
+  return (cents < 0 ? "-$" : "$") +
+    Math.abs(cents).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
 const pct = (n) => `${Number(n) >= 0 ? "+" : ""}${(Number(n) || 0).toFixed(2)}%`;
 
 function lsGet(k) { try { return localStorage.getItem(k) || ""; } catch { return ""; } }
