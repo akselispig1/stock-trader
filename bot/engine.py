@@ -371,6 +371,15 @@ class Engine:
             print(f"  - {o['side']} {o['symbol']} ${o['notional_usd']:,.0f} "
                   f"-> {o['status']} {('(' + o['detail'] + ')') if o['detail'] else ''}")
 
+        # If we placed anything, refresh so the dashboard shows post-trade
+        # balances and the new positions immediately (not one cycle late).
+        if any(o["status"] == "executed" for o in checked):
+            try:
+                account = self.alpaca.account()
+                positions = self.alpaca.positions()
+            except AlpacaError:
+                pass
+
         state = self.write_state(account, positions, memo, plan, checked, market_open)
         print("[engine] wrote docs/data/state.json")
         return state
