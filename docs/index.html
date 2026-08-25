@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AI Stockbroker</title>
+  <meta name="description" content="An AI stockbroker powered by Claude + Alpaca." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤖</text></svg>" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">🤖📈</span>
+      <div>
+        <h1>AI Stockbroker</h1>
+        <p class="tagline">Claude researches the market and trades your Alpaca account.</p>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <span id="mode-badge" class="badge badge-paper">PAPER</span>
+      <button id="refresh-btn" class="btn btn-ghost" title="Reload latest data">↻ Refresh</button>
+    </div>
+  </header>
+
+  <main>
+    <p id="updated-line" class="updated-line">Loading latest run…</p>
+
+    <!-- Portfolio stats -->
+    <section class="stat-grid" id="stat-grid" aria-label="Portfolio summary">
+      <div class="stat"><span class="stat-label">Equity</span><span class="stat-value" id="stat-equity">—</span></div>
+      <div class="stat"><span class="stat-label">Cash</span><span class="stat-value" id="stat-cash">—</span></div>
+      <div class="stat"><span class="stat-label">Day P&amp;L</span><span class="stat-value" id="stat-daypl">—</span></div>
+      <div class="stat"><span class="stat-label">Buying power</span><span class="stat-value" id="stat-bp">—</span></div>
+    </section>
+
+    <!-- Equity curve -->
+    <section class="card">
+      <div class="card-head">
+        <h2>Equity curve</h2>
+        <span class="muted" id="equity-range"></span>
+      </div>
+      <div id="chart-wrap" class="chart-wrap">
+        <svg id="equity-chart" viewBox="0 0 800 220" preserveAspectRatio="none" role="img" aria-label="Equity over time"></svg>
+        <p id="chart-empty" class="muted center">No history yet — the chart fills in as the bot runs.</p>
+      </div>
+    </section>
+
+    <div class="two-col">
+      <!-- Latest AI decision -->
+      <section class="card">
+        <div class="card-head">
+          <h2>Latest AI decision</h2>
+          <span id="market-state" class="pill"></span>
+        </div>
+        <p id="market-summary" class="market-summary">—</p>
+        <details id="memo-details" class="memo">
+          <summary>Read the full research memo</summary>
+          <pre id="memo-text" class="memo-text"></pre>
+        </details>
+        <h3 class="subhead">Orders this cycle</h3>
+        <div class="table-scroll">
+          <table id="orders-table" class="data-table">
+            <thead>
+              <tr><th>Side</th><th>Symbol</th><th>Size</th><th>Conf.</th><th>Status</th><th>Reasoning</th></tr>
+            </thead>
+            <tbody id="orders-body"><tr><td colspan="6" class="muted center">No orders yet.</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Positions -->
+      <section class="card">
+        <div class="card-head">
+          <h2>Positions</h2>
+          <span class="muted" id="positions-source">from last bot run</span>
+        </div>
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead>
+              <tr><th>Symbol</th><th>Qty</th><th>Value</th><th>P&amp;L</th></tr>
+            </thead>
+            <tbody id="positions-body"><tr><td colspan="4" class="muted center">No positions.</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <!-- Interactive tools -->
+    <div class="two-col">
+      <!-- Ask the AI -->
+      <section class="card">
+        <div class="card-head"><h2>Ask the AI now</h2></div>
+        <p class="muted small">
+          Test the bot's research live in your browser. Enter a ticker and Claude
+          will research it (with web search) and give a view. This is read-only —
+          it never places a trade. Your Anthropic key is stored only in this
+          browser (localStorage) and sent straight to Anthropic.
+        </p>
+        <div class="field-row">
+          <input id="anthropic-key" type="password" class="input" placeholder="Anthropic API key (sk-ant-…)" autocomplete="off" />
+        </div>
+        <div class="field-row">
+          <input id="research-ticker" type="text" class="input input-ticker" placeholder="e.g. NVDA" />
+          <button id="research-btn" class="btn btn-primary">Research</button>
+        </div>
+        <div id="research-output" class="research-output"></div>
+      </section>
+
+      <!-- Live connect -->
+      <section class="card">
+        <div class="card-head"><h2>Live account view</h2></div>
+        <p class="muted small">
+          Optional. Paste your Alpaca keys to pull your <em>real-time</em> balance
+          and positions directly (the panels above otherwise show the last bot run).
+          When the bot is in live mode, any orders it proposes can be approved here.
+          Keys stay in this browser only.
+        </p>
+        <div class="field-row">
+          <input id="alpaca-key" type="password" class="input" placeholder="Alpaca API key" autocomplete="off" />
+        </div>
+        <div class="field-row">
+          <input id="alpaca-secret" type="password" class="input" placeholder="Alpaca secret key" autocomplete="off" />
+        </div>
+        <div class="field-row">
+          <label class="checkbox"><input type="checkbox" id="alpaca-live" /> Use live account (real money)</label>
+          <button id="connect-btn" class="btn btn-primary">Connect</button>
+        </div>
+        <p id="connect-status" class="muted small"></p>
+      </section>
+    </div>
+
+    <section class="card config-card">
+      <div class="card-head"><h2>Configuration</h2></div>
+      <dl id="config-list" class="config-list"></dl>
+      <p class="muted small">
+        Change these from the repo: <strong>Settings → Secrets and variables → Actions → Variables</strong>.
+        Risk limits are enforced in the bot itself — the AI cannot exceed them.
+      </p>
+    </section>
+
+    <p class="disclaimer">
+      ⚠️ For education and experimentation. This is not financial advice. Markets are
+      risky; an AI can and will be wrong. Start in paper mode and never risk money you
+      can't afford to lose.
+    </p>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

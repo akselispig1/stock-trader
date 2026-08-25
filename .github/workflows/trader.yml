@@ -1,0 +1,76 @@
+name: AI Stockbroker
+
+# The bot's "brain". Runs on a schedule during US market hours, and can also
+# be triggered by hand from the Actions tab for an on-demand test run.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Research only - build a plan but place NO orders"
+        type: boolean
+        default: false
+      force:
+        description: "Place orders even if the market is closed"
+        type: boolean
+        default: false
+  schedule:
+    # GitHub cron is UTC. 13:30-20:00 UTC on weekdays roughly covers the
+    # 09:30-16:00 ET session during US Eastern Daylight Time. Runs every 30
+    # minutes. (During EST/winter, shift one hour earlier if you like.)
+    - cron: "0,30 13-20 * * 1-5"
+
+# Never let two cycles run at once (they'd both try to trade + commit).
+concurrency:
+  group: ai-stockbroker
+  cancel-in-progress: false
+
+permissions:
+  contents: write  # needed to commit the dashboard data back to the repo
+
+jobs:
+  trade:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run one trading cycle
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+          # Variables (repo Settings -> Secrets and variables -> Actions -> Variables).
+          # These are optional; the defaults in bot/config.py apply if unset.
+          TRADING_MODE: ${{ vars.TRADING_MODE || 'paper' }}
+          LIVE_REQUIRE_APPROVAL: ${{ vars.LIVE_REQUIRE_APPROVAL || 'true' }}
+          CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL || 'claude-opus-5' }}
+          ENABLE_WEB_SEARCH: ${{ vars.ENABLE_WEB_SEARCH || 'true' }}
+          WATCHLIST: ${{ vars.WATCHLIST }}
+          MAX_ORDERS_PER_RUN: ${{ vars.MAX_ORDERS_PER_RUN }}
+          MAX_NOTIONAL_PER_ORDER: ${{ vars.MAX_NOTIONAL_PER_ORDER }}
+          MAX_ALLOCATION_PCT_PER_SYMBOL: ${{ vars.MAX_ALLOCATION_PCT_PER_SYMBOL }}
+          MIN_CASH_RESERVE_PCT: ${{ vars.MIN_CASH_RESERVE_PCT }}
+          ALLOW_SHORT: ${{ vars.ALLOW_SHORT || 'false' }}
+        run: |
+          ARGS=""
+          if [ "${{ inputs.dry_run }}" = "true" ]; then ARGS="$ARGS --dry-run"; fi
+          if [ "${{ inputs.force }}" = "true" ]; then ARGS="$ARGS --force"; fi
+          python -m bot.run $ARGS
+
+      - name: Commit dashboard data
+        run: |
+          git config user.name "ai-stockbroker[bot]"
+          git config user.email "ai-stockbroker@users.noreply.github.com"
+          git add docs/data/state.json docs/data/history.jsonl
+          if git diff --staged --quiet; then
+            echo "No data changes to commit."
+          else
+            git commit -m "chore: update dashboard data [skip ci]"
+            git push
+          fi
