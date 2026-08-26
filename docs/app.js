@@ -192,6 +192,7 @@ function renderConfig(c) {
   const r = c.risk || {};
   const items = [
     ["Trading mode", c.trading_mode],
+    ["Risk level", (r.level || "medium")],
     ["Capital cap", c.capital_cap ? `${c.capital_cap.toLocaleString()} ${c.capital_currency || ""}`.trim() : "off (full account)"],
     ["AI model", c.model],
     ["Web search", c.enable_web_search ? "on" : "off"],
