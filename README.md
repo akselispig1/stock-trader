@@ -165,7 +165,8 @@ All optional — set these as repo **Variables** (not secrets). Defaults are in
 | `ENABLE_WEB_SEARCH` | `true` | Let the AI search the web for live news/sentiment |
 | `ENABLE_AUDITOR` | `true` | A second, independent AI audits every trade before it runs and can veto unjustified ones |
 | `WATCHLIST` | 10 large-caps | Comma-separated tickers the AI may trade, e.g. `AAPL,MSFT,SPY` |
-| `MAX_ORDERS_PER_RUN` | `4` | Cap on trades per cycle |
+| `RISK_LEVEL` | `medium`* | Preset for the guardrails: `low` / `medium` / `semi-high` / `high`. Higher = more concentration per name and less cash held back. The specific vars below override it. (*The GitHub Actions workflow defaults this to `semi-high`.) |
+| `MAX_ORDERS_PER_RUN` | preset | Cap on trades per cycle (overrides the preset) |
 | `MAX_NOTIONAL_PER_ORDER` | `1000` | Max dollars per single order |
 | `MAX_ALLOCATION_PCT_PER_SYMBOL` | `25` | Max % of equity in any one symbol |
 | `MIN_CASH_RESERVE_PCT` | `5` | Keep at least this % of equity in cash |

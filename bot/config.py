@@ -55,6 +55,33 @@ def _list(name: str, default: list[str]) -> list[str]:
     return [s.strip().upper() for s in raw.split(",") if s.strip()]
 
 
+# Risk presets. RISK_LEVEL picks one; individual MAX_/MIN_ env vars still override
+# the chosen preset. Higher levels allow more concentration and deploy more cash;
+# none of them enable shorting (that stays behind the separate ALLOW_SHORT flag).
+RISK_PRESETS: dict[str, dict[str, float]] = {
+    "low":       {"alloc": 15.0, "reserve": 15.0, "orders": 3},
+    "medium":    {"alloc": 25.0, "reserve": 5.0,  "orders": 4},
+    "semi-high": {"alloc": 40.0, "reserve": 2.0,  "orders": 5},
+    "high":      {"alloc": 60.0, "reserve": 0.0,  "orders": 6},
+}
+
+
+def _norm_level(raw: str) -> str:
+    lvl = (raw or "").strip().lower().replace("_", "-").replace(" ", "-")
+    aliases = {"semihigh": "semi-high", "semi": "semi-high", "mid": "medium", "med": "medium"}
+    lvl = aliases.get(lvl, lvl)
+    return lvl if lvl in RISK_PRESETS else "medium"
+
+
+def _risk_level() -> str:
+    return _norm_level(os.getenv("RISK_LEVEL", "medium"))
+
+
+def _risk(key: str, env_name: str) -> float:
+    """Preset value for the active RISK_LEVEL, overridable by an explicit env var."""
+    return _float(env_name, RISK_PRESETS[_risk_level()][key])
+
+
 # Alpaca hosts. Paper and live share the data host; only the trading host differs.
 PAPER_TRADING_HOST = "https://paper-api.alpaca.markets"
 LIVE_TRADING_HOST = "https://api.alpaca.markets"
@@ -97,12 +124,15 @@ class Config:
     capital_currency: str = field(default_factory=lambda: os.getenv("CAPITAL_CURRENCY", "CHF").strip() or "CHF")
 
     # --- Risk limits ---
-    max_orders_per_run: int = field(default_factory=lambda: _int("MAX_ORDERS_PER_RUN", 4))
+    # RISK_LEVEL (low | medium | semi-high | high) sets the preset; the specific
+    # MAX_/MIN_ vars below still override it if set explicitly.
+    risk_level: str = field(default_factory=_risk_level)
+    max_orders_per_run: int = field(default_factory=lambda: int(_risk("orders", "MAX_ORDERS_PER_RUN")))
     max_notional_per_order: float = field(default_factory=lambda: _float("MAX_NOTIONAL_PER_ORDER", 1000.0))
     max_allocation_pct_per_symbol: float = field(
-        default_factory=lambda: _float("MAX_ALLOCATION_PCT_PER_SYMBOL", 25.0)
+        default_factory=lambda: _risk("alloc", "MAX_ALLOCATION_PCT_PER_SYMBOL")
     )
-    min_cash_reserve_pct: float = field(default_factory=lambda: _float("MIN_CASH_RESERVE_PCT", 5.0))
+    min_cash_reserve_pct: float = field(default_factory=lambda: _risk("reserve", "MIN_CASH_RESERVE_PCT"))
     allow_short: bool = field(default_factory=lambda: _bool("ALLOW_SHORT", False))
 
     @property
@@ -144,6 +174,7 @@ class Config:
             "capital_currency": self.capital_currency,
             "enable_auditor": self.enable_auditor,
             "risk": {
+                "level": self.risk_level,
                 "max_orders_per_run": self.max_orders_per_run,
                 "max_notional_per_order": self.max_notional_per_order,
                 "max_allocation_pct_per_symbol": self.max_allocation_pct_per_symbol,
