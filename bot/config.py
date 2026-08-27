@@ -106,6 +106,10 @@ class Config:
     # A second, independent AI that audits the trader AI's decisions before they
     # execute and can veto trades that aren't clearly justified (anti-black-box).
     enable_auditor: bool = field(default_factory=lambda: _bool("ENABLE_AUDITOR", True))
+    # Cheap gate: a small model decides whether a full research cycle is worth
+    # running this tick, skipping quiet cycles to save cost.
+    triage_enabled: bool = field(default_factory=lambda: _bool("TRIAGE_ENABLED", True))
+    triage_model: str = field(default_factory=lambda: os.getenv("TRIAGE_MODEL", "claude-haiku-4-5").strip())
 
     # --- Universe ---
     watchlist: list[str] = field(
@@ -173,6 +177,8 @@ class Config:
             "capital_cap": self.capital_cap,
             "capital_currency": self.capital_currency,
             "enable_auditor": self.enable_auditor,
+            "triage_enabled": self.triage_enabled,
+            "triage_model": self.triage_model,
             "risk": {
                 "level": self.risk_level,
                 "max_orders_per_run": self.max_orders_per_run,
