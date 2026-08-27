@@ -15,6 +15,7 @@ from .alpaca import Alpaca, AlpacaError
 from .auditor import Auditor
 from .brain import Brain
 from .config import Config
+from .fundamentals import ValueScout
 from .triage import Triage
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "docs", "data")
@@ -68,6 +69,9 @@ class Engine:
         self.brain = Brain(cfg)
         self.auditor = Auditor(cfg)
         self.triage = Triage(cfg)
+        self.scout = ValueScout(cfg)
+        self._scout_cost = 0.0  # fundamentals scan cost incurred this cycle (0 if cached)
+        self._last_scan: dict | None = None
 
     # ---- capital cap -----------------------------------------------------
     def effective_funds(self, account: dict, positions: list[dict]) -> tuple[float, float, float]:
@@ -91,6 +95,7 @@ class Engine:
 
     # ---- context building -----------------------------------------------
     def build_context(self) -> tuple[str, dict, list[dict]]:
+        self._scout_cost = 0.0
         account = self.alpaca.account()
         positions = self.alpaca.positions()
 
@@ -155,6 +160,33 @@ class Engine:
             for n in news[:15]:
                 syms = ",".join(n.get("symbols", [])[:3])
                 lines.append(f"  [{syms}] {n.get('headline', '').strip()}")
+
+        # Stop-loss review: flag positions past the soft threshold for the AI to
+        # decide cut vs. hold WITH reasoning (not a blind auto-sell).
+        breaches = [
+            p for p in positions
+            if _f(p.get("unrealized_plpc")) * 100 <= -self.cfg.stop_loss_review_pct
+        ]
+        if breaches:
+            lines += ["", f"⚠ STOP-LOSS REVIEW (positions down more than "
+                      f"{self.cfg.stop_loss_review_pct:.0f}%):"]
+            for p in breaches:
+                lines.append(
+                    f"  {p['symbol']}: {_f(p.get('unrealized_plpc')) * 100:.1f}% "
+                    f"(mkt ${_f(p.get('market_value')):,.2f}). Decide: CUT (sell) if the "
+                    f"loss reflects a broken thesis or clear downtrend, or HOLD with an "
+                    f"explicit reason. Do not hold a loser without one."
+                )
+
+        # Fundamental value scan (cached ~daily) - biases toward undervalued names.
+        if self.cfg.enable_fundamentals:
+            try:
+                scan = self.scout.get_scan(symbols)
+                self._scout_cost = self.scout.last_cost
+                self._last_scan = scan
+                lines += ["", ValueScout.summarize(scan)]
+            except Exception as e:
+                print(f"[engine] value scout unavailable: {e}")
 
         return "\n".join(lines), account, positions
 
@@ -278,7 +310,7 @@ class Engine:
         orders. Fails open on error: the hard risk limits already applied, so a
         transient auditor outage should not silently block a validated trade.
         """
-        to_audit = [o for o in checked if o["status"] == "approved"]
+        to_audit = [o for o in checked if o["status"] == "approved" and not o.get("forced")]
         if not self.cfg.enable_auditor or not to_audit:
             return None
         try:
@@ -401,6 +433,7 @@ class Engine:
             "orders": checked,
             "audit": audit,
             "skipped": skipped,
+            "fundamentals": self._last_scan,
         }
         with open(STATE_PATH, "w") as f:
             json.dump(state, f, indent=2)
@@ -421,16 +454,37 @@ class Engine:
 
         return state
 
+    def _hard_stop_orders(self, positions: list[dict]) -> list[dict]:
+        """Dumb safety backstop: force-close any position down worse than the hard
+        stop-loss threshold, regardless of the AI. Off when STOP_LOSS_HARD_PCT<=0."""
+        hard = self.cfg.stop_loss_hard_pct
+        if not hard or hard <= 0:
+            return []
+        forced = []
+        for p in positions:
+            plpc = _f(p.get("unrealized_plpc")) * 100
+            if plpc <= -hard:
+                forced.append({
+                    "symbol": p["symbol"], "side": "sell",
+                    "notional_usd": round(abs(_f(p.get("market_value"))), 2),
+                    "qty": abs(_f(p.get("qty"))),
+                    "reasoning": f"Hard stop-loss: down {plpc:.1f}% (limit -{hard:.0f}%).",
+                    "confidence": 1.0, "status": "approved",
+                    "detail": f"hard stop-loss ({plpc:.1f}%)", "forced": True,
+                })
+        return forced
+
     def _record_skip(self, account: dict, positions: list[dict], reason: str,
                      triage_cost: float) -> dict:
         """Triage decided this cycle isn't worth a full run: log a cheap, honest
         skip (still refreshing P&L and cost) and return."""
+        skip_cost = triage_cost + self._scout_cost  # a stale fundamentals refresh still costs
         ledger = _load_ledger()
         if ledger.get("baseline_equity") in (None, 0):
             ledger["baseline_equity"] = _f(account.get("equity"))
-        ledger["cumulative_ai_cost"] = _f(ledger.get("cumulative_ai_cost")) + triage_cost
+        ledger["cumulative_ai_cost"] = _f(ledger.get("cumulative_ai_cost")) + skip_cost
         _save_ledger(ledger)
-        print(f"[engine] skipped full cycle (triage ${triage_cost:.4f}); "
+        print(f"[engine] skipped full cycle (cost ${skip_cost:.4f}); "
               f"total=${_f(ledger['cumulative_ai_cost']):.2f}")
         plan = {
             "market_summary": f"Triage skipped a full research cycle to save cost — {reason}",
@@ -438,7 +492,7 @@ class Engine:
         }
         memo = f"Cheap triage gate: no full research this cycle.\n\nReason: {reason}"
         state = self.write_state(account, positions, memo, plan, [], True,
-                                 audit=None, ledger=ledger, cycle_cost=triage_cost,
+                                 audit=None, ledger=ledger, cycle_cost=skip_cost,
                                  skipped=True)
         print("[engine] wrote docs/data/state.json")
         return state
@@ -456,10 +510,16 @@ class Engine:
         print(f"[engine] equity=${_f(account.get('equity')):,.2f} "
               f"positions={len(positions)} market_open={market_open}")
 
+        # Hard stop-loss backstop (if enabled): compute forced closes up front.
+        forced = self._hard_stop_orders(positions)
+        if forced:
+            print(f"[engine] hard stop-loss triggered for "
+                  f"{', '.join(o['symbol'] for o in forced)}")
+
         # Cheap triage gate: skip the expensive full pipeline on quiet cycles.
-        # Bypassed for dry-run/force so those always exercise the full flow.
+        # Bypassed for dry-run/force, and never skipped when a hard stop fired.
         triage_cost = 0.0
-        if self.cfg.triage_enabled and not self.cfg.dry_run and not force:
+        if self.cfg.triage_enabled and not self.cfg.dry_run and not force and not forced:
             run_full, reason = self.triage.should_run(context)
             triage_cost = self.triage.last_cost
             print(f"[engine] triage: run_full={run_full} (${triage_cost:.4f}) - {reason}")
@@ -476,8 +536,15 @@ class Engine:
 
         checked = self.risk_check(raw_orders, account, positions)
 
+        # Prepend forced hard-stop closes; drop any AI order on a force-closed
+        # symbol so we don't double-trade it.
+        if forced:
+            forced_syms = {o["symbol"] for o in forced}
+            checked = forced + [o for o in checked if o["symbol"] not in forced_syms]
+
         # Independent second AI reviews what would actually be traded and can
         # veto orders that aren't honestly justified (the anti-black-box gate).
+        # Forced safety stops are exempt from the audit.
         self.auditor.last_cost = 0.0
         audit = self.run_audit(memo, context, checked)
 
@@ -496,7 +563,8 @@ class Engine:
                 pass
 
         # AI operating cost for this cycle, and the running P&L-vs-cost ledger.
-        cycle_cost = triage_cost + self.brain.run_cost + self.auditor.last_cost
+        cycle_cost = (triage_cost + self._scout_cost
+                      + self.brain.run_cost + self.auditor.last_cost)
         ledger = _load_ledger()
         if ledger.get("baseline_equity") in (None, 0):
             ledger["baseline_equity"] = _f(account.get("equity"))

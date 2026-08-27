@@ -165,7 +165,10 @@ All optional — set these as repo **Variables** (not secrets). Defaults are in
 | `ENABLE_WEB_SEARCH` | `true` | Let the AI search the web for live news/sentiment |
 | `ENABLE_AUDITOR` | `true` | A second, independent AI audits every trade before it runs and can veto unjustified ones |
 | `TRIAGE_ENABLED` | `true` | A cheap Haiku "is this worth a full run?" gate that skips quiet cycles (~$0.002 vs ~$0.15) to save cost |
-| `WATCHLIST` | 10 large-caps | Comma-separated tickers the AI may trade, e.g. `AAPL,MSFT,SPY` |
+| `WATCHLIST` | ~21 names | Comma-separated tickers the AI may trade — default is diversified across sectors + ETFs, not just mega-cap tech |
+| `ENABLE_FUNDAMENTALS` | `true` | Cached (~daily) AI "value scout" that flags names trading below their fundamentals as buy candidates |
+| `STOP_LOSS_REVIEW_PCT` | `8` | Positions down more than this % are flagged to the AI to decide cut-vs-hold with reasoning |
+| `STOP_LOSS_HARD_PCT` | `0` | Dumb safety backstop: force-close a position down more than this % regardless of the AI (`0` = off) |
 | `RISK_LEVEL` | `medium`* | Preset for the guardrails: `low` / `medium` / `semi-high` / `high`. Higher = more concentration per name and less cash held back. The specific vars below override it. (*The GitHub Actions workflow defaults this to `semi-high`.) |
 | `MAX_ORDERS_PER_RUN` | preset | Cap on trades per cycle (overrides the preset) |
 | `MAX_NOTIONAL_PER_ORDER` | `1000` | Max dollars per single order |

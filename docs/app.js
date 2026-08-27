@@ -52,6 +52,7 @@ async function loadState() {
   renderMarketState(STATE.market_open);
   renderDecision(STATE);
   renderAudit(STATE.audit);
+  renderValueScan(STATE.fundamentals);
   renderPositions(STATE.positions, "from last bot run");
   renderConfig(STATE.config);
   $("updated-line").innerHTML = STATE.updated_at
@@ -187,6 +188,25 @@ function renderAudit(audit) {
   const ts = audit.transparency_score;
   $("audit-transparency").textContent =
     ts != null ? `Transparency score: ${Math.round(ts * 100)}%` : "";
+}
+
+function renderValueScan(scan) {
+  const card = $("value-card");
+  const signals = (scan && scan.signals) || [];
+  // Only show names with an actual edge (undervalued or rich); hide the "fair" noise.
+  const notable = signals.filter((s) => s.undervalued || s.verdict === "rich");
+  if (!notable.length) { card.style.display = "none"; return; }
+  card.style.display = "";
+  $("value-asof").textContent = scan.generated_at ? `as of ${new Date(scan.generated_at).toLocaleDateString()}` : "";
+  const rank = { cheap: 0, rich: 1, fair: 2 };
+  notable.sort((a, b) => (rank[a.verdict] ?? 3) - (rank[b.verdict] ?? 3));
+  $("value-body").innerHTML = notable.map((s) => {
+    const cls = s.undervalued ? "tag-buy" : s.verdict === "rich" ? "tag-sell" : "";
+    const label = s.undervalued ? "undervalued" : s.verdict;
+    return `<tr><td class="mono">${s.symbol}</td>` +
+      `<td><span class="tag ${cls}">${label}</span></td>` +
+      `<td class="small">${s.note || ""}</td></tr>`;
+  }).join("");
 }
 
 function renderPositions(positions, source) {
