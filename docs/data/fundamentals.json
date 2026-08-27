@@ -1,0 +1,153 @@
+{
+  "generated_at": "2026-08-27T22:56:01.607784+00:00",
+  "model": "claude-sonnet-5",
+  "signals": [
+    {
+      "symbol": "AAPL",
+      "verdict": "rich",
+      "undervalued": false,
+      "note": "iPhone/services growth remains modest single-to-low-double-digit while shares sit near record highs on a ~30x forward multiple that already assumes a stronger AI-driven upgrade cycle than guidance supports.",
+      "confidence": 0.55
+    },
+    {
+      "symbol": "MSFT",
+      "verdict": "fair",
+      "undervalued": false,
+      "note": "Mid-30s% Azure/AI growth roughly justifies the ~32x forward multiple, though rising capex intensity caps further re-rating upside.",
+      "confidence": 0.55
+    },
+    {
+      "symbol": "NVDA",
+      "verdict": "fair",
+      "undervalued": false,
+      "note": "Data-center revenue keeps beating and raising, but the stock's elevated forward multiple has already priced in continued triple-digit growth, leaving little residual edge.",
+      "confidence": 0.5
+    },
+    {
+      "symbol": "GOOGL",
+      "verdict": "cheap",
+      "undervalued": true,
+      "note": "Double-digit Search/Cloud growth with improving margins trades at a discount multiple versus mega-cap peers, a gap that looks wider than the antitrust/AI-disruption risk warrants.",
+      "confidence": 0.55
+    },
+    {
+      "symbol": "AMZN",
+      "verdict": "fair",
+      "undervalued": false,
+      "note": "AWS reacceleration and retail margin expansion are running roughly in line with the premium multiple investors are already paying.",
+      "confidence": 0.5
+    },
+    {
+      "symbol": "META",
+      "verdict": "fair",
+      "undervalued": false,
+      "note": "Strong ad revenue growth is offset by aggressive AI capex spending, keeping the current multiple reasonably balanced against near-term earnings power.",
+      "confidence": 0.5
+    },
+    {
+      "symbol": "TSLA",
+      "verdict": "rich",
+      "undervalued": false,
+      "note": "Delivery growth has stalled while the stock trades at a triple-digit earnings multiple built on unproven robotaxi/humanoid bets rather than current auto fundamentals.",
+      "confidence": 0.6
+    },
+    {
+      "symbol": "JPM",
+      "verdict": "fair",
+      "undervalued": false,
+      "note": "Record trading and net-interest income are already reflected in a premium-to-book valuation versus regional and global bank peers.",
+      "confidence": 0.5
+    },
+    {
+      "symbol": "V",
+      "verdict": "fair",
+      "undervalued": false,
+      "note": "Steady double-digit payment-volume growth is matched by a consistent high-20s multiple, leaving minimal valuation gap.",
+      "confidence": 0.5
+    },
+    {
+      "symbol": "UNH",
+      "verdict": "cheap",
+      "undervalued": true,
+      "note": "After 2025 guidance cuts and a medical-cost-ratio shock crushed the multiple to historic lows, the price appears to overshoot the downside relative to a normalizing earnings base.",
+      "confidence": 0.5
+    },
+    {
+      "symbol": "JNJ",
+      "verdict": "fair",
+      "undervalued": false,
+      "note": "Steady pharma/medtech growth is offset by talc litigation overhang, keeping shares roughly in line with healthcare-sector peers.",
+      "confidence": 0.5
+    },
+    {
+      "symbol": "XOM",
+      "verdict": "fair",
+      "undervalued": false,
+      "note": "Earnings track oil and gas prices closely, and the current multiple sits within historical energy-sector norms.",
+      "confidence": 0.5
+    },
+    {
+      "symbol": "WMT",
+      "verdict": "rich",
+      "undervalued": false,
+      "note": "E-commerce and ad-business momentum are real, but shares have re-rated well above their historical multiple, pricing in near-flawless execution.",
+      "confidence": 0.5
+    },
+    {
+      "symbol": "COST",
+      "verdict": "rich",
+      "undervalued": false,
+      "note": "Consistent comp-sales growth doesn't fully justify a near-50x earnings multiple, among the richest in retail.",
+      "confidence": 0.55
+    },
+    {
+      "symbol": "CAT",
+      "verdict": "fair",
+      "undervalued": false,
+      "note": "Data-center and power-infrastructure-driven equipment demand is a real tailwind, but the stock's cycle-high valuation already reflects it.",
+      "confidence": 0.45
+    },
+    {
+      "symbol": "SPY",
+      "verdict": "fair",
+      "undervalued": false,
+      "note": "Broad-market index fund; aggregate valuation, not a single-company earnings mismatch, so no directional edge applies.",
+      "confidence": 0.5
+    },
+    {
+      "symbol": "QQQ",
+      "verdict": "fair",
+      "undervalued": false,
+      "note": "Heavily concentrated in mega-cap tech already priced for continued AI-driven earnings growth, so no distinct value gap versus its holdings.",
+      "confidence": 0.5
+    },
+    {
+      "symbol": "IWM",
+      "verdict": "fair",
+      "undervalued": false,
+      "note": "Small-cap index valuation reflects aggregate rate-sensitivity and cyclical earnings rather than a single mispriced fundamental.",
+      "confidence": 0.5
+    },
+    {
+      "symbol": "GLD",
+      "verdict": "fair",
+      "undervalued": false,
+      "note": "Gold-tracking ETF priced off macro, real-rate, and safe-haven demand rather than corporate earnings, so no earnings-based mispricing applies.",
+      "confidence": 0.5
+    },
+    {
+      "symbol": "XLE",
+      "verdict": "fair",
+      "undervalued": false,
+      "note": "Energy sector ETF value tracks aggregate oil/gas commodity prices and sector earnings, currently roughly in line with the commodity backdrop.",
+      "confidence": 0.5
+    },
+    {
+      "symbol": "XLF",
+      "verdict": "fair",
+      "undervalued": false,
+      "note": "Financial sector ETF valuation tracks aggregate bank/insurer earnings and the rate environment, currently roughly in line with fundamentals.",
+      "confidence": 0.5
+    }
+  ]
+}
