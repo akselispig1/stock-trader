@@ -49,7 +49,7 @@ jobs:
           # These are optional; the defaults in bot/config.py apply if unset.
           TRADING_MODE: ${{ vars.TRADING_MODE || 'paper' }}
           LIVE_REQUIRE_APPROVAL: ${{ vars.LIVE_REQUIRE_APPROVAL || 'true' }}
-          CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL || 'claude-opus-5' }}
+          CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL || 'claude-sonnet-5' }}
           ENABLE_WEB_SEARCH: ${{ vars.ENABLE_WEB_SEARCH || 'true' }}
           # Second, independent AI that audits trades before they run (anti-black-box).
           ENABLE_AUDITOR: ${{ vars.ENABLE_AUDITOR || 'true' }}
@@ -74,7 +74,7 @@ jobs:
         run: |
           git config user.name "ai-stockbroker[bot]"
           git config user.email "ai-stockbroker@users.noreply.github.com"
-          git add docs/data/state.json docs/data/history.jsonl
+          git add docs/data/state.json docs/data/history.jsonl docs/data/ledger.json
           if git diff --staged --quiet; then
             echo "No data changes to commit."
           else

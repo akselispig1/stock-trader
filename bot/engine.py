@@ -19,6 +19,23 @@ from .config import Config
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "docs", "data")
 STATE_PATH = os.path.join(DATA_DIR, "state.json")
 HISTORY_PATH = os.path.join(DATA_DIR, "history.jsonl")
+LEDGER_PATH = os.path.join(DATA_DIR, "ledger.json")
+
+
+def _load_ledger() -> dict:
+    """Persistent P&L/cost ledger: the equity baseline the book's P&L is measured
+    from, plus the running total of AI operating cost."""
+    try:
+        with open(LEDGER_PATH) as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {"baseline_equity": None, "cumulative_ai_cost": 0.0}
+
+
+def _save_ledger(ledger: dict) -> None:
+    os.makedirs(DATA_DIR, exist_ok=True)
+    with open(LEDGER_PATH, "w") as f:
+        json.dump(ledger, f, indent=2)
 
 
 def _f(x, default=0.0) -> float:
@@ -323,14 +340,25 @@ class Engine:
     def write_state(
         self, account: dict, positions: list[dict], memo: str, plan: dict,
         checked: list[dict], market_open: bool, audit: dict | None = None,
+        ledger: dict | None = None, cycle_cost: float = 0.0,
     ) -> dict:
         os.makedirs(DATA_DIR, exist_ok=True)
         now = datetime.now(timezone.utc).isoformat()
         equity = _f(account.get("equity"))
         eff_equity, eff_cash, invested = self.effective_funds(account, positions)
-        # When a cap is set, the equity curve should track the managed book
-        # (invested + available), not the untouched six-figure paper balance.
-        book_equity = invested + eff_cash if self.cfg.capital_cap is not None else equity
+
+        # True book P&L: this bot is the only thing trading the account, so the
+        # account's equity change from the ledger baseline IS the book's gross
+        # gain/loss (realised + unrealised). Net subtracts cumulative AI cost.
+        ledger = ledger or _load_ledger()
+        baseline = _f(ledger.get("baseline_equity")) or equity
+        ai_cost_total = _f(ledger.get("cumulative_ai_cost"))
+        gross_pnl = equity - baseline
+        net_pnl = gross_pnl - ai_cost_total
+        base = self.cfg.capital_cap if self.cfg.capital_cap is not None else baseline
+        # book_equity reflects real P&L (not clamped to the cap); net is after cost.
+        book_equity = base + gross_pnl
+        net_book_equity = base + net_pnl
 
         state = {
             "updated_at": now,
@@ -348,6 +376,11 @@ class Engine:
                 "effective_cash": eff_cash,
                 "invested": invested,
                 "book_equity": book_equity,
+                "net_book_equity": net_book_equity,
+                "gross_pnl": gross_pnl,
+                "net_pnl": net_pnl,
+                "ai_cost_cycle": cycle_cost,
+                "ai_cost_total": ai_cost_total,
             },
             "positions": [
                 {
@@ -371,7 +404,11 @@ class Engine:
 
         history_row = {
             "t": now,
-            "equity": book_equity,
+            "equity": book_equity,          # gross book value (P&L vs baseline)
+            "net_equity": net_book_equity,  # after cumulative AI cost
+            "gross_pnl": gross_pnl,
+            "net_pnl": net_pnl,
+            "ai_cost_total": ai_cost_total,
             "cash": eff_cash,
             "n_orders": sum(1 for o in checked if o["status"] in ("executed", "proposed", "dry_run")),
             "summary": plan.get("market_summary", "")[:280],
@@ -406,6 +443,7 @@ class Engine:
 
         # Independent second AI reviews what would actually be traded and can
         # veto orders that aren't honestly justified (the anti-black-box gate).
+        self.auditor.last_cost = 0.0
         audit = self.run_audit(memo, context, checked)
 
         self.execute(checked, market_open, force)
@@ -422,6 +460,17 @@ class Engine:
             except AlpacaError:
                 pass
 
-        state = self.write_state(account, positions, memo, plan, checked, market_open, audit)
+        # AI operating cost for this cycle, and the running P&L-vs-cost ledger.
+        cycle_cost = self.brain.run_cost + self.auditor.last_cost
+        ledger = _load_ledger()
+        if ledger.get("baseline_equity") in (None, 0):
+            ledger["baseline_equity"] = _f(account.get("equity"))
+        ledger["cumulative_ai_cost"] = _f(ledger.get("cumulative_ai_cost")) + cycle_cost
+        _save_ledger(ledger)
+        print(f"[engine] AI cost this cycle=${cycle_cost:.4f} "
+              f"total=${_f(ledger['cumulative_ai_cost']):.2f}")
+
+        state = self.write_state(account, positions, memo, plan, checked,
+                                 market_open, audit, ledger, cycle_cost)
         print("[engine] wrote docs/data/state.json")
         return state

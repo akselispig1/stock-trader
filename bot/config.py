@@ -101,7 +101,7 @@ class Config:
     dry_run: bool = field(default_factory=lambda: _bool("DRY_RUN", False))
 
     # --- The AI ---
-    model: str = field(default_factory=lambda: os.getenv("CLAUDE_MODEL", "claude-opus-5").strip())
+    model: str = field(default_factory=lambda: os.getenv("CLAUDE_MODEL", "claude-sonnet-5").strip())
     enable_web_search: bool = field(default_factory=lambda: _bool("ENABLE_WEB_SEARCH", True))
     # A second, independent AI that audits the trader AI's decisions before they
     # execute and can veto trades that aren't clearly justified (anti-black-box).

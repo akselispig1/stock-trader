@@ -19,6 +19,7 @@ from typing import Any
 import anthropic
 
 from .config import Config
+from .costs import price_usage
 
 AUDITOR_SYSTEM = """You are an INDEPENDENT trade auditor. You did not make these \
 trades - a separate AI portfolio manager did, and your job is to protect the \
@@ -76,6 +77,7 @@ class Auditor:
     def __init__(self, cfg: Config):
         self.cfg = cfg
         self.client = anthropic.Anthropic(api_key=cfg.anthropic_api_key)
+        self.last_cost = 0.0  # US$ spent by the most recent audit call
 
     def audit(self, memo: str, context: str, orders: list[dict]) -> dict:
         """Review the orders about to be placed. `orders` is the post-risk-check
@@ -101,6 +103,7 @@ class Auditor:
                 "format": {"type": "json_schema", "schema": AUDIT_SCHEMA},
             },
         )
+        self.last_cost = price_usage(self.cfg.model, resp.usage)
         text = next((b.text for b in resp.content if b.type == "text"), "{}")
         try:
             audit = json.loads(text)

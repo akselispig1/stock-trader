@@ -21,6 +21,7 @@ from typing import Any
 import anthropic
 
 from .config import Config
+from .costs import price_usage
 
 ANALYST_SYSTEM = """You are a disciplined AI equity analyst and portfolio manager \
 running a systematic trading account. You are given a live snapshot of the account \
@@ -35,6 +36,10 @@ to check current news, earnings, and sentiment for the most relevant tickers bef
 deciding. Cite what you found in your memo.
 - Think in terms of risk-adjusted decisions. It is completely acceptable - often \
 correct - to do nothing on a given cycle. Do not trade for the sake of trading.
+- This account pays a real AI operating cost every cycle. Treat that as a hurdle: \
+only act when the expected edge clearly exceeds trading and operating costs, and \
+aim to grow the book NET of those costs. Churn is how a small account bleeds - \
+holding is free, trading is not.
 - You may only BUY names on the watchlist, and only SELL names you already hold \
 (no shorting). Size positions sensibly relative to total equity.
 
@@ -89,9 +94,14 @@ class Brain:
         self.cfg = cfg
         # 10-min default timeout is generous enough for a research turn.
         self.client = anthropic.Anthropic(api_key=cfg.anthropic_api_key)
+        self.run_cost = 0.0  # US$ spent by this cycle's research + structure calls
+
+    def _bill(self, resp) -> None:
+        self.run_cost += price_usage(self.cfg.model, resp.usage)
 
     def research(self, context: str) -> str:
         """Phase 1: produce a written research memo (may use web search)."""
+        self.run_cost = 0.0  # reset at the start of each cycle
         tools = []
         # Web search runs server-side and needs an Opus/Sonnet-class model; Haiku
         # doesn't support this tool variant, so quietly skip it there.
@@ -113,6 +123,7 @@ class Brain:
                 tools=tools,
                 messages=messages,
             )
+            self._bill(resp)
             if resp.stop_reason == "pause_turn":
                 messages.append({"role": "assistant", "content": resp.content})
                 continue
@@ -138,6 +149,7 @@ class Brain:
                 "format": {"type": "json_schema", "schema": TRADE_PLAN_SCHEMA},
             },
         )
+        self._bill(resp)
         text = next((b.text for b in resp.content if b.type == "text"), "{}")
         try:
             plan = json.loads(text)
