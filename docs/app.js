@@ -92,15 +92,19 @@ function renderAccount(a) {
     // Capped mode: show the managed budget rather than the full paper balance.
     const invested = a.invested || 0;
     const cash = a.effective_cash != null ? a.effective_cash : a.cash || 0;
-    const openPl = (STATE?.positions || []).reduce((s, p) => s + (Number(p.unrealized_pl) || 0), 0);
+    const net = a.net_pnl != null
+      ? a.net_pnl
+      : (STATE?.positions || []).reduce((s, p) => s + (Number(p.unrealized_pl) || 0), 0);
     setStat("stat-equity", `Budget (${a.capital_currency || "cap"})`, money(a.capital_cap));
     setStat("stat-bp", "Invested", money(invested));
     setStat("stat-cash", "Available", money(cash));
-    setStat("stat-daypl", "Open P&L", money(openPl));
-    daypl.classList.toggle("pos", openPl >= 0);
-    daypl.classList.toggle("neg", openPl < 0);
+    setStat("stat-daypl", "Net P&L (after AI cost)", money(net));
+    daypl.classList.toggle("pos", net >= 0);
+    daypl.classList.toggle("neg", net < 0);
+    renderPnlLine(a);
     return;
   }
+  renderPnlLine(null);
 
   setStat("stat-equity", "Equity", money(a.equity));
   setStat("stat-cash", "Cash", money(a.cash));
@@ -148,6 +152,21 @@ function renderDecision(s) {
   document.querySelectorAll(".approve-btn").forEach((b) =>
     b.addEventListener("click", () => approveOrder(b))
   );
+}
+
+function renderPnlLine(a) {
+  const el = $("pnl-line");
+  if (!el) return;
+  if (!a || a.gross_pnl == null) { el.textContent = ""; el.style.display = "none"; return; }
+  el.style.display = "";
+  const gross = a.gross_pnl || 0, cost = a.ai_cost_total || 0, net = a.net_pnl || 0;
+  const covering = net >= 0;
+  el.innerHTML =
+    `Gross P&L <b class="${gross >= 0 ? "pos" : "neg"}">${money(gross)}</b> ` +
+    `− AI cost <b>${money(cost)}</b> = ` +
+    `Net <b class="${covering ? "pos" : "neg"}">${money(net)}</b> ` +
+    `<span class="pill ${covering ? "audit-approve" : "audit-reject"}">` +
+    `${covering ? "covering its costs" : "not yet covering costs"}</span>`;
 }
 
 function renderAudit(audit) {

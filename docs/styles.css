@@ -104,6 +104,9 @@ main {
 .btn-small { padding: 4px 10px; font-size: 12.5px; }
 
 .updated-line { color: var(--text-muted); font-size: 13px; margin: 18px 2px 14px; }
+.pnl-line { font-size: 13.5px; color: var(--text-muted); margin: -6px 2px 18px; }
+.pnl-line b { color: var(--text); font-variant-numeric: tabular-nums; }
+.pnl-line .pill { margin-left: 6px; }
 
 /* Stat grid */
 .stat-grid {
