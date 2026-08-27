@@ -102,6 +102,25 @@
       <div id="audit-transparency" class="muted small"></div>
     </section>
 
+    <!-- Fundamental value scout -->
+    <section class="card" id="value-card" style="display:none">
+      <div class="card-head">
+        <h2>🔬 Fundamental value scan</h2>
+        <span class="muted" id="value-asof"></span>
+      </div>
+      <p class="muted small">
+        A separate AI scan of each name's price vs. its latest-quarter fundamentals.
+        Undervalued = price sits below what the fundamentals justify (buy candidate);
+        rich = price ahead of fundamentals (avoid/trim). Refreshed about daily.
+      </p>
+      <div class="table-scroll">
+        <table class="data-table">
+          <thead><tr><th>Symbol</th><th>Verdict</th><th>Note</th></tr></thead>
+          <tbody id="value-body"></tbody>
+        </table>
+      </div>
+    </section>
+
     <!-- Interactive tools -->
     <div class="two-col">
       <!-- Ask the AI -->

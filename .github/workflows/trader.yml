@@ -61,6 +61,10 @@ jobs:
           RISK_LEVEL: ${{ vars.RISK_LEVEL || 'high' }}
           # Cheap triage gate that skips quiet cycles to save cost (true/false).
           TRIAGE_ENABLED: ${{ vars.TRIAGE_ENABLED || 'true' }}
+          # Cached daily fundamentals value scan; AI-reviewed stop-loss.
+          ENABLE_FUNDAMENTALS: ${{ vars.ENABLE_FUNDAMENTALS || 'true' }}
+          STOP_LOSS_REVIEW_PCT: ${{ vars.STOP_LOSS_REVIEW_PCT || '8' }}
+          STOP_LOSS_HARD_PCT: ${{ vars.STOP_LOSS_HARD_PCT || '0' }}
           MAX_ORDERS_PER_RUN: ${{ vars.MAX_ORDERS_PER_RUN }}
           MAX_NOTIONAL_PER_ORDER: ${{ vars.MAX_NOTIONAL_PER_ORDER }}
           MAX_ALLOCATION_PCT_PER_SYMBOL: ${{ vars.MAX_ALLOCATION_PCT_PER_SYMBOL }}
@@ -76,7 +80,7 @@ jobs:
         run: |
           git config user.name "ai-stockbroker[bot]"
           git config user.email "ai-stockbroker@users.noreply.github.com"
-          git add docs/data/state.json docs/data/history.jsonl docs/data/ledger.json
+          git add docs/data/state.json docs/data/history.jsonl docs/data/ledger.json docs/data/fundamentals.json
           if git diff --staged --quiet; then
             echo "No data changes to commit."
           else

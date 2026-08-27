@@ -42,6 +42,13 @@ aim to grow the book NET of those costs. Churn is how a small account bleeds - \
 holding is free, trading is not.
 - You may only BUY names on the watchlist, and only SELL names you already hold \
 (no shorting). Size positions sensibly relative to total equity.
+- A FUNDAMENTAL VALUE SCAN may be provided: names flagged undervalued (price below \
+what last quarter's fundamentals justify) are your best BUY candidates; names \
+whose price already reflects the fundamentals are not edges - don't chase them; \
+names flagged rich are candidates to avoid or trim.
+- If a STOP-LOSS REVIEW section lists losing positions, address each explicitly: \
+cut it (add a SELL) if the loss reflects a broken thesis or clear downtrend, or \
+state a specific reason to hold. Never ignore a flagged loser.
 
 Output a concise research memo: the current market read, then for each ticker you \
 want to act on, a one-line thesis and the rough dollar size. End with a clear \

@@ -112,12 +112,36 @@ class Config:
     triage_model: str = field(default_factory=lambda: os.getenv("TRIAGE_MODEL", "claude-haiku-4-5").strip())
 
     # --- Universe ---
+    # Diversified across sectors + ETFs so the bot isn't trapped in correlated
+    # mega-cap AI: tech, financials, healthcare, energy, staples, plus broad and
+    # sector/asset ETFs. Override with the WATCHLIST env/var.
     watchlist: list[str] = field(
         default_factory=lambda: _list(
             "WATCHLIST",
-            ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA", "AMD", "SPY", "QQQ"],
+            [
+                # mega-cap tech
+                "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA",
+                # financials / healthcare / energy / staples / industrial
+                "JPM", "V", "UNH", "JNJ", "XOM", "WMT", "COST", "CAT",
+                # ETFs: broad, small-cap, gold, energy, financials
+                "SPY", "QQQ", "IWM", "GLD", "XLE", "XLF",
+            ],
         )
     )
+
+    # --- Fundamental "value scout" ---
+    # A cached (refreshed ~daily) AI scan that judges each name's price vs. its
+    # latest-quarter fundamentals, flagging undervalued (price below fair value)
+    # buy candidates and price-already-reflects-it names to skip.
+    enable_fundamentals: bool = field(default_factory=lambda: _bool("ENABLE_FUNDAMENTALS", True))
+    fundamentals_ttl_hours: float = field(default_factory=lambda: _float("FUNDAMENTALS_TTL_HOURS", 20.0))
+
+    # --- Stop-loss (AI-reviewed) ---
+    # A position down more than STOP_LOSS_REVIEW_PCT is flagged to the trader AI
+    # to decide cut vs. hold with reasoning. STOP_LOSS_HARD_PCT (0 = off) is a
+    # dumb safety backstop that force-closes catastrophic losers regardless.
+    stop_loss_review_pct: float = field(default_factory=lambda: _float("STOP_LOSS_REVIEW_PCT", 8.0))
+    stop_loss_hard_pct: float = field(default_factory=lambda: _float("STOP_LOSS_HARD_PCT", 0.0))
 
     # --- Capital cap ---
     # The bot behaves as if it only has this much money, regardless of the real
@@ -179,6 +203,9 @@ class Config:
             "enable_auditor": self.enable_auditor,
             "triage_enabled": self.triage_enabled,
             "triage_model": self.triage_model,
+            "enable_fundamentals": self.enable_fundamentals,
+            "stop_loss_review_pct": self.stop_loss_review_pct,
+            "stop_loss_hard_pct": self.stop_loss_hard_pct,
             "risk": {
                 "level": self.risk_level,
                 "max_orders_per_run": self.max_orders_per_run,
