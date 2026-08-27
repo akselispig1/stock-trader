@@ -131,7 +131,10 @@ function renderDecision(s) {
   const body = $("orders-body");
   const orders = s.orders || [];
   if (!orders.length) {
-    body.innerHTML = `<tr><td colspan="6" class="muted center">No orders this cycle — the AI chose to hold.</td></tr>`;
+    const msg = s.skipped
+      ? "⏭️ Triage skipped a full research cycle to save cost."
+      : "No orders this cycle — the AI chose to hold.";
+    body.innerHTML = `<tr><td colspan="6" class="muted center">${msg}</td></tr>`;
     return;
   }
   body.innerHTML = orders.map((o) => {

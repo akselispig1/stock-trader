@@ -15,6 +15,7 @@ from .alpaca import Alpaca, AlpacaError
 from .auditor import Auditor
 from .brain import Brain
 from .config import Config
+from .triage import Triage
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "docs", "data")
 STATE_PATH = os.path.join(DATA_DIR, "state.json")
@@ -66,6 +67,7 @@ class Engine:
         self.alpaca = Alpaca(cfg)
         self.brain = Brain(cfg)
         self.auditor = Auditor(cfg)
+        self.triage = Triage(cfg)
 
     # ---- capital cap -----------------------------------------------------
     def effective_funds(self, account: dict, positions: list[dict]) -> tuple[float, float, float]:
@@ -340,7 +342,7 @@ class Engine:
     def write_state(
         self, account: dict, positions: list[dict], memo: str, plan: dict,
         checked: list[dict], market_open: bool, audit: dict | None = None,
-        ledger: dict | None = None, cycle_cost: float = 0.0,
+        ledger: dict | None = None, cycle_cost: float = 0.0, skipped: bool = False,
     ) -> dict:
         os.makedirs(DATA_DIR, exist_ok=True)
         now = datetime.now(timezone.utc).isoformat()
@@ -398,6 +400,7 @@ class Engine:
             "memo": memo,
             "orders": checked,
             "audit": audit,
+            "skipped": skipped,
         }
         with open(STATE_PATH, "w") as f:
             json.dump(state, f, indent=2)
@@ -418,6 +421,28 @@ class Engine:
 
         return state
 
+    def _record_skip(self, account: dict, positions: list[dict], reason: str,
+                     triage_cost: float) -> dict:
+        """Triage decided this cycle isn't worth a full run: log a cheap, honest
+        skip (still refreshing P&L and cost) and return."""
+        ledger = _load_ledger()
+        if ledger.get("baseline_equity") in (None, 0):
+            ledger["baseline_equity"] = _f(account.get("equity"))
+        ledger["cumulative_ai_cost"] = _f(ledger.get("cumulative_ai_cost")) + triage_cost
+        _save_ledger(ledger)
+        print(f"[engine] skipped full cycle (triage ${triage_cost:.4f}); "
+              f"total=${_f(ledger['cumulative_ai_cost']):.2f}")
+        plan = {
+            "market_summary": f"Triage skipped a full research cycle to save cost — {reason}",
+            "orders": [],
+        }
+        memo = f"Cheap triage gate: no full research this cycle.\n\nReason: {reason}"
+        state = self.write_state(account, positions, memo, plan, [], True,
+                                 audit=None, ledger=ledger, cycle_cost=triage_cost,
+                                 skipped=True)
+        print("[engine] wrote docs/data/state.json")
+        return state
+
     # ---- top-level run ---------------------------------------------------
     def run(self, force: bool = False) -> dict:
         self.cfg.validate()
@@ -430,6 +455,16 @@ class Engine:
         context, account, positions = self.build_context()
         print(f"[engine] equity=${_f(account.get('equity')):,.2f} "
               f"positions={len(positions)} market_open={market_open}")
+
+        # Cheap triage gate: skip the expensive full pipeline on quiet cycles.
+        # Bypassed for dry-run/force so those always exercise the full flow.
+        triage_cost = 0.0
+        if self.cfg.triage_enabled and not self.cfg.dry_run and not force:
+            run_full, reason = self.triage.should_run(context)
+            triage_cost = self.triage.last_cost
+            print(f"[engine] triage: run_full={run_full} (${triage_cost:.4f}) - {reason}")
+            if not run_full:
+                return self._record_skip(account, positions, reason, triage_cost)
 
         memo = self.brain.research(context)
         print("[engine] research memo received "
@@ -461,7 +496,7 @@ class Engine:
                 pass
 
         # AI operating cost for this cycle, and the running P&L-vs-cost ledger.
-        cycle_cost = self.brain.run_cost + self.auditor.last_cost
+        cycle_cost = triage_cost + self.brain.run_cost + self.auditor.last_cost
         ledger = _load_ledger()
         if ledger.get("baseline_equity") in (None, 0):
             ledger["baseline_equity"] = _f(account.get("equity"))

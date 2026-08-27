@@ -164,6 +164,7 @@ All optional — set these as repo **Variables** (not secrets). Defaults are in
 | `CLAUDE_MODEL` | `claude-opus-5` | The AI model. `claude-sonnet-5` is ~60% cheaper; `claude-haiku-4-5` cheapest (no web search) |
 | `ENABLE_WEB_SEARCH` | `true` | Let the AI search the web for live news/sentiment |
 | `ENABLE_AUDITOR` | `true` | A second, independent AI audits every trade before it runs and can veto unjustified ones |
+| `TRIAGE_ENABLED` | `true` | A cheap Haiku "is this worth a full run?" gate that skips quiet cycles (~$0.002 vs ~$0.15) to save cost |
 | `WATCHLIST` | 10 large-caps | Comma-separated tickers the AI may trade, e.g. `AAPL,MSFT,SPY` |
 | `RISK_LEVEL` | `medium`* | Preset for the guardrails: `low` / `medium` / `semi-high` / `high`. Higher = more concentration per name and less cash held back. The specific vars below override it. (*The GitHub Actions workflow defaults this to `semi-high`.) |
 | `MAX_ORDERS_PER_RUN` | preset | Cap on trades per cycle (overrides the preset) |

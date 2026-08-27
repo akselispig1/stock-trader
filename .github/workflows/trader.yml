@@ -57,8 +57,10 @@ jobs:
           CAPITAL_CAP: ${{ vars.CAPITAL_CAP || '1000' }}
           CAPITAL_CURRENCY: ${{ vars.CAPITAL_CURRENCY || 'CHF' }}
           WATCHLIST: ${{ vars.WATCHLIST }}
-          # Risk preset: low | medium | semi-high | high. Defaults to semi-high.
-          RISK_LEVEL: ${{ vars.RISK_LEVEL || 'semi-high' }}
+          # Risk preset: low | medium | semi-high | high. Defaults to high.
+          RISK_LEVEL: ${{ vars.RISK_LEVEL || 'high' }}
+          # Cheap triage gate that skips quiet cycles to save cost (true/false).
+          TRIAGE_ENABLED: ${{ vars.TRIAGE_ENABLED || 'true' }}
           MAX_ORDERS_PER_RUN: ${{ vars.MAX_ORDERS_PER_RUN }}
           MAX_NOTIONAL_PER_ORDER: ${{ vars.MAX_NOTIONAL_PER_ORDER }}
           MAX_ALLOCATION_PCT_PER_SYMBOL: ${{ vars.MAX_ALLOCATION_PCT_PER_SYMBOL }}
