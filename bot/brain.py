@@ -50,6 +50,26 @@ names flagged rich are candidates to avoid or trim.
 cut it (add a SELL) if the loss reflects a broken thesis or clear downtrend, or \
 state a specific reason to hold. Never ignore a flagged loser.
 
+POSITION LIFECYCLE RULES (follow these - they are the discipline of the book):
+- MANDATE: run a diversified book of MANY MEDIUM/SMALL positions, not a few large
+  bets. Aim for roughly the target number of positions given in the context, each
+  around an equal weight of the budget. Never let one name dominate.
+- ENTRY: only buy when there is a real reason - the value scan flags it
+  undervalued, or there is a specific catalyst. Do NOT buy something whose price
+  already reflects the news. A new name must add something the book lacks
+  (different sector/factor), not duplicate existing exposure.
+- SIZING by conviction, within the per-symbol cap: high conviction ~ a full
+  target weight, medium ~ two-thirds, starter ~ one-third.
+- EVERY BUY must come with: a one-line thesis (why), a target_price (where you
+  take profit) and a stop_price (where you admit you were wrong), plus a
+  conviction of high/medium/starter. A buy without an exit plan is not allowed.
+- EXIT: sell when (a) the target is hit - take the profit, (b) the stop is
+  breached or the thesis is broken - cut it, or (c) you need the capital for a
+  clearly better idea. Let winners run toward their target; do not let a winner
+  round-trip back to flat.
+- Judge every existing holding against ITS OWN recorded thesis and target/stop
+  before considering anything new.
+
 Output a concise research memo: the current market read, then for each ticker you \
 want to act on, a one-line thesis and the rough dollar size. End with a clear \
 recommendation. Do NOT output JSON here - just your written analysis."""
@@ -63,6 +83,10 @@ Rules you must follow:
 - Only SELL tickers that appear in the current positions (never short).
 - Express each order as a positive US-dollar `notional` amount.
 - If the memo recommends no action, return an empty orders list.
+- For every BUY, carry through the memo's thesis, target_price, stop_price and
+  conviction. If the memo gives no explicit target/stop, infer sensible ones from
+  its reasoning (never leave a buy without an exit plan). For SELLs set
+  target_price and stop_price to null and put the exit reason in thesis.
 - `confidence` is your 0-1 confidence in that specific order.
 Do not invent trades the memo does not support."""
 
@@ -85,8 +109,22 @@ TRADE_PLAN_SCHEMA: dict[str, Any] = {
                     "notional_usd": {"type": "number"},
                     "reasoning": {"type": "string"},
                     "confidence": {"type": "number"},
+                    "thesis": {
+                        "type": "string",
+                        "description": "BUY: the one-line reason to own this. SELL: why exiting.",
+                    },
+                    "target_price": {
+                        "type": ["number", "null"],
+                        "description": "BUY: price at which to take profit. null for sells.",
+                    },
+                    "stop_price": {
+                        "type": ["number", "null"],
+                        "description": "BUY: price at which the thesis is wrong. null for sells.",
+                    },
+                    "conviction": {"type": "string", "enum": ["high", "medium", "starter"]},
                 },
-                "required": ["symbol", "side", "notional_usd", "reasoning", "confidence"],
+                "required": ["symbol", "side", "notional_usd", "reasoning", "confidence",
+                             "thesis", "target_price", "stop_price", "conviction"],
                 "additionalProperties": False,
             },
         },
