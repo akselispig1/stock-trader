@@ -161,14 +161,17 @@ function renderDecision(s) {
 
   // Make it unmistakable when orders were NOT actually sent to the broker,
   // so the dashboard is never mistaken for the real account activity.
-  const notSent = orders.filter((o) => ["dry_run", "deferred", "proposed"].includes(o.status));
+  // Anything not "executed" never reached the broker - including rejected and
+  // vetoed orders, which must not suppress the warning.
   const banner = $("orders-note");
-  if (notSent.length === orders.length && orders.length) {
+  const executed = orders.filter((o) => o.status === "executed");
+  const notSent = orders.filter((o) => ["dry_run", "deferred", "proposed"].includes(o.status));
+  if (orders.length && !executed.length) {
     const why = {
       dry_run: "this was a <strong>Research only</strong> run",
       deferred: "the market was closed",
       proposed: "live mode needs your approval",
-    }[notSent[0].status] || "they were not sent";
+    }[(notSent[0] || {}).status] || "none of them passed the risk checks";
     banner.style.display = "";
     banner.innerHTML = `⚠️ <strong>These orders were NOT placed</strong> — ${why}, so nothing was
       sent to Alpaca and they will not appear in your broker account. The Positions
@@ -237,23 +240,71 @@ async function loadJournal() {
   try {
     const res = await fetch(`data/journal.jsonl?t=${Date.now()}`);
     if (!res.ok) throw new Error("no journal");
-    rows = res.text ? (await res.text()).trim().split("\n").filter(Boolean).map((l) => JSON.parse(l)) : [];
+    rows = (await res.text()).trim().split("\n").filter(Boolean).map((l) => JSON.parse(l));
   } catch { rows = []; }
+
+  // --- Paper-trading tab: only orders actually sent to the broker ---
+  const fills = [];
+  rows.forEach((r) => {
+    (r.orders || []).forEach((o) => {
+      if (o.status === "executed") fills.push({ ...o, t: r.t });
+    });
+  });
+  fills.reverse();
+  $("fills-count").textContent = fills.length ? `${fills.length} trades` : "";
+  if (fills.length) {
+    $("fills-body").innerHTML = fills.map((o) => `<tr>
+      <td class="mono small">${o.t ? new Date(o.t).toLocaleString() : ""}</td>
+      <td><span class="tag tag-${o.side}">${o.side}</span></td>
+      <td class="mono">${o.symbol}</td>
+      <td class="mono">${money(o.notional_usd)}</td>
+      <td class="small">${o.thesis || o.reasoning || ""}</td>
+    </tr>`).join("");
+  }
+
+  // --- Research tab: the full thinking record, newest first ---
   const card = $("journal-card");
   if (!rows.length) { card.style.display = "none"; return; }
   card.style.display = "";
-  rows.reverse();
+  const list = rows.slice().reverse();
   $("journal-count").textContent = `${rows.length} cycles`;
-  $("journal-list").innerHTML = rows.slice(0, 40).map((r) => {
+  $("journal-list").innerHTML = list.slice(0, 40).map((r) => {
     const when = r.t ? new Date(r.t).toLocaleString() : "";
     const memo = (r.memo || "").trim();
+    const placed = (r.orders || []).some((o) => o.status === "executed");
+    const badge = r.skipped
+      ? `<span class="pill">skipped</span>`
+      : placed
+        ? `<span class="pill audit-approve">traded</span>`
+        : `<span class="pill audit-flag">research only</span>`;
     return `<details class="journal-entry">
-      <summary><span class="mono small">${when}</span> — <strong>${r.actions || "no action"}</strong>
-        <span class="muted small">${(r.summary || "").slice(0, 120)}</span></summary>
-      ${memo ? `<pre class="memo-text">${memo.replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c]))}</pre>` : ""}
-      ${r.audit ? `<p class="muted small"><strong>Auditor:</strong> ${r.audit}</p>` : ""}
+      <summary><span class="mono small">${when}</span> ${badge}
+        <strong>${r.actions || "no action"}</strong>
+        <span class="muted small">${esc((r.summary || "").slice(0, 110))}</span></summary>
+      ${memo ? `<pre class="memo-text">${esc(memo)}</pre>` : ""}
+      ${r.audit ? `<p class="muted small"><strong>Auditor:</strong> ${esc(r.audit)}</p>` : ""}
     </details>`;
   }).join("");
+}
+
+function esc(t) {
+  return String(t).replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c]));
+}
+
+function initTabs() {
+  document.querySelectorAll(".tab").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("is-active", b === btn));
+      document.querySelectorAll(".panel").forEach((p) => {
+        p.hidden = p.id !== `panel-${btn.dataset.panel}`;
+      });
+      try { localStorage.setItem("sb_tab", btn.dataset.panel); } catch {}
+    });
+  });
+  let saved = "trading";
+  try { saved = localStorage.getItem("sb_tab") || "trading"; } catch {}
+  const btn = document.querySelector(`.tab[data-panel="${saved}"]`);
+  if (btn && saved !== "trading") btn.click();
 }
 
 function renderValueScan(scan) {
@@ -465,6 +516,7 @@ function init() {
   $("alpaca-key").value = lsGet(LS.alpacaKey);
   $("alpaca-secret").value = lsGet(LS.alpacaSecret);
   $("alpaca-live").checked = lsGet(LS.alpacaLive) === "1";
+  initTabs();
   $("refresh-btn").addEventListener("click", loadState);
   $("research-btn").addEventListener("click", research);
   $("connect-btn").addEventListener("click", connectAlpaca);

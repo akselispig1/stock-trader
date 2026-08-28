@@ -279,3 +279,15 @@ main {
   margin: 0 0 10px;
 }
 .orders-note strong { font-weight: 700; }
+
+/* Tabs */
+.tabs { display: flex; gap: 8px; margin: 0 0 18px; border-bottom: 1px solid var(--border); }
+.tab {
+  font-family: inherit; font-size: 14px; font-weight: 600;
+  background: none; border: none; border-bottom: 2px solid transparent;
+  color: var(--text-muted); padding: 10px 14px; cursor: pointer;
+  margin-bottom: -1px; transition: color .15s, border-color .15s;
+}
+.tab:hover { color: var(--text); }
+.tab.is-active { color: var(--accent); border-bottom-color: var(--accent); }
+.panel[hidden] { display: none; }
