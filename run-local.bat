@@ -28,6 +28,14 @@ if not exist .env (
   pause & exit /b 1
 )
 
+REM Catch keys left blank or still on the placeholder, so you get a clear
+REM message instead of a confusing 401 from Alpaca or Anthropic later.
+findstr /X /C:"ANTHROPIC_API_KEY=sk-ant-..." /C:"ANTHROPIC_API_KEY=" /C:"ALPACA_API_KEY=" /C:"ALPACA_SECRET_KEY=" .env >nul
+if not errorlevel 1 (
+  echo [KEY] .env still has blank keys - fill all three in, then re-run.
+  pause & exit /b 1
+)
+
 if "%1"=="once" (
   echo [*] Running a single cycle...
   python -m bot.run
