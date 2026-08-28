@@ -188,12 +188,16 @@ function renderPnlLine(a) {
   el.style.display = "";
   const gross = a.gross_pnl || 0, cost = a.ai_cost_total || 0, net = a.net_pnl || 0;
   const covering = net >= 0;
+  // With no cost recorded yet there is nothing to judge - don't claim it is
+  // "covering its costs" on an empty measurement period.
+  const verdict = cost === 0 && gross === 0
+    ? `<span class="pill">awaiting first run</span>`
+    : `<span class="pill ${covering ? "audit-approve" : "audit-reject"}">` +
+      `${covering ? "covering its costs" : "not yet covering costs"}</span>`;
   el.innerHTML =
     `Gross P&L <b class="${gross >= 0 ? "pos" : "neg"}">${money(gross)}</b> ` +
     `− AI cost <b>${money(cost)}</b> = ` +
-    `Net <b class="${covering ? "pos" : "neg"}">${money(net)}</b> ` +
-    `<span class="pill ${covering ? "audit-approve" : "audit-reject"}">` +
-    `${covering ? "covering its costs" : "not yet covering costs"}</span>`;
+    `Net <b class="${covering ? "pos" : "neg"}">${money(net)}</b> ` + verdict;
 }
 
 function renderAudit(audit) {
