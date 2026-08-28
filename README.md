@@ -171,11 +171,23 @@ own always-current copy. One URL, never stale, no git involved.
 A failed cycle is logged and the loop continues — one bad API call never stops
 the bot.
 
+### Easiest: run it on your own computer
+
+```bash
+./run-local.sh        # macOS / Linux   (run-local.bat on Windows)
+./run-local.sh once   # a single cycle, then exit
+```
+
+First run creates a private Python environment, installs the dependencies and
+writes a `.env` for your keys; fill those in and run it again. Then the bot
+trades on schedule and the dashboard is at **http://localhost:8080**. `.env` is
+git-ignored, so the keys never leave your machine.
+
 ### Where to run it
 
 | Option | Cost | Notes |
 |---|---|---|
-| **Your own computer** | free | Simplest. `python -m bot.serve`, or a cron / Task Scheduler entry running `python -m bot.run`. Only trades while the machine is on. |
+| **Your own computer** | free | Simplest — run `./run-local.sh` (macOS/Linux) or `run-local.bat` (Windows). It sets everything up and starts the bot + dashboard at `http://localhost:8080`. Only trades while the machine is on. |
 | **Render free web service** | free (750 h/mo) | Blueprint included (`render.yaml`). ⚠️ Free services **sleep after ~15 min without HTTP traffic**, which pauses the loop — point a free uptime pinger (e.g. UptimeRobot) at `/healthz` every 5 min to keep it awake. |
 | **Any container host / VPS** | varies | `Dockerfile` included. Fly.io **no longer has a free tier** (trial only, then ~$2/mo for a small always-on machine); Render background workers are ~$7/mo. |
 
