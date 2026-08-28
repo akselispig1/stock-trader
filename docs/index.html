@@ -102,6 +102,36 @@
       <div id="audit-transparency" class="muted small"></div>
     </section>
 
+    <!-- Position theses -->
+    <section class="card" id="theses-card" style="display:none">
+      <div class="card-head"><h2>📌 Position theses</h2></div>
+      <p class="muted small">
+        Why the AI owns each position, and the plan it set at entry. Every cycle it
+        judges each holding against <em>its own</em> target and stop — so it takes
+        profits and cuts losers instead of drifting.
+      </p>
+      <div class="table-scroll">
+        <table class="data-table">
+          <thead><tr><th>Symbol</th><th>Conviction</th><th>Target</th><th>Stop</th><th>Thesis</th></tr></thead>
+          <tbody id="theses-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Research journal -->
+    <section class="card" id="journal-card" style="display:none">
+      <div class="card-head">
+        <h2>📓 Research journal</h2>
+        <span class="muted" id="journal-count"></span>
+      </div>
+      <p class="muted small">
+        Every cycle the AI researched and what it concluded — newest first. The bot
+        reads its own recent entries too, so it keeps continuity instead of starting
+        from scratch each time.
+      </p>
+      <div id="journal-list"></div>
+    </section>
+
     <!-- Fundamental value scout -->
     <section class="card" id="value-card" style="display:none">
       <div class="card-head">

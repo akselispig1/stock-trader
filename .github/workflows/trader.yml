@@ -59,6 +59,8 @@ jobs:
           WATCHLIST: ${{ vars.WATCHLIST }}
           # Risk preset: low | medium | semi-high | high. Defaults to high.
           RISK_LEVEL: ${{ vars.RISK_LEVEL || 'high' }}
+          # Roughly how many positions the book should hold (drives sizing).
+          TARGET_POSITIONS: ${{ vars.TARGET_POSITIONS }}
           # Cheap triage gate that skips quiet cycles to save cost (true/false).
           TRIAGE_ENABLED: ${{ vars.TRIAGE_ENABLED || 'true' }}
           # Cached daily fundamentals value scan; AI-reviewed stop-loss.
@@ -80,7 +82,7 @@ jobs:
         run: |
           git config user.name "ai-stockbroker[bot]"
           git config user.email "ai-stockbroker@users.noreply.github.com"
-          git add docs/data/state.json docs/data/history.jsonl docs/data/ledger.json docs/data/fundamentals.json
+          git add -A docs/data/
           if git diff --staged --quiet; then
             echo "No data changes to commit."
           else

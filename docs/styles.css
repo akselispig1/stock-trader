@@ -255,3 +255,15 @@ main {
   .config-list { grid-template-columns: 1fr; }
   .tagline { display: none; }
 }
+
+/* Research journal */
+.journal-entry {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  background: var(--surface-2);
+}
+.journal-entry summary { cursor: pointer; font-size: 13.5px; }
+.journal-entry summary::marker { color: var(--text-muted); }
+.journal-entry .memo-text { max-height: 320px; }

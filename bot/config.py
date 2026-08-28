@@ -56,13 +56,17 @@ def _list(name: str, default: list[str]) -> list[str]:
 
 
 # Risk presets. RISK_LEVEL picks one; individual MAX_/MIN_ env vars still override
-# the chosen preset. Higher levels allow more concentration and deploy more cash;
-# none of them enable shorting (that stays behind the separate ALLOW_SHORT flag).
+# the chosen preset. None of them enable shorting (that stays behind ALLOW_SHORT).
+# RISK_LEVEL controls AGGRESSIVENESS (how fully invested, how many names, how
+# many trades per cycle) - NOT concentration. The per-symbol cap stays modest at
+# every level so the book stays a diversified set of medium/small positions
+# rather than a few huge bets. Raise MAX_ALLOCATION_PCT_PER_SYMBOL explicitly if
+# you ever want a concentrated book.
 RISK_PRESETS: dict[str, dict[str, float]] = {
-    "low":       {"alloc": 15.0, "reserve": 15.0, "orders": 3},
-    "medium":    {"alloc": 25.0, "reserve": 5.0,  "orders": 4},
-    "semi-high": {"alloc": 40.0, "reserve": 2.0,  "orders": 5},
-    "high":      {"alloc": 60.0, "reserve": 0.0,  "orders": 6},
+    "low":       {"alloc": 15.0, "reserve": 20.0, "orders": 3, "positions": 6},
+    "medium":    {"alloc": 18.0, "reserve": 10.0, "orders": 4, "positions": 8},
+    "semi-high": {"alloc": 20.0, "reserve": 5.0,  "orders": 5, "positions": 10},
+    "high":      {"alloc": 22.0, "reserve": 0.0,  "orders": 6, "positions": 12},
 }
 
 
@@ -156,6 +160,9 @@ class Config:
     # MAX_/MIN_ vars below still override it if set explicitly.
     risk_level: str = field(default_factory=_risk_level)
     max_orders_per_run: int = field(default_factory=lambda: int(_risk("orders", "MAX_ORDERS_PER_RUN")))
+    # Roughly how many positions the book should hold - drives position sizing
+    # (target weight ~ 100/target_positions %). Many medium/small positions.
+    target_positions: int = field(default_factory=lambda: int(_risk("positions", "TARGET_POSITIONS")))
     max_notional_per_order: float = field(default_factory=lambda: _float("MAX_NOTIONAL_PER_ORDER", 1000.0))
     max_allocation_pct_per_symbol: float = field(
         default_factory=lambda: _risk("alloc", "MAX_ALLOCATION_PCT_PER_SYMBOL")
@@ -209,6 +216,7 @@ class Config:
             "risk": {
                 "level": self.risk_level,
                 "max_orders_per_run": self.max_orders_per_run,
+                "target_positions": self.target_positions,
                 "max_notional_per_order": self.max_notional_per_order,
                 "max_allocation_pct_per_symbol": self.max_allocation_pct_per_symbol,
                 "min_cash_reserve_pct": self.min_cash_reserve_pct,

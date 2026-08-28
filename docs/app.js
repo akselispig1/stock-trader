@@ -53,12 +53,14 @@ async function loadState() {
   renderDecision(STATE);
   renderAudit(STATE.audit);
   renderValueScan(STATE.fundamentals);
+  renderTheses(STATE.theses, STATE.positions);
   renderPositions(STATE.positions, "from last bot run");
   renderConfig(STATE.config);
   $("updated-line").innerHTML = STATE.updated_at
     ? `Last bot run <strong>${timeAgo(STATE.updated_at)}</strong> · ${new Date(STATE.updated_at).toLocaleString()}`
     : "No bot run recorded yet — trigger the “AI Stockbroker” workflow in the Actions tab.";
   await loadHistory();
+  await loadJournal();
 }
 
 async function loadHistory() {
@@ -188,6 +190,52 @@ function renderAudit(audit) {
   const ts = audit.transparency_score;
   $("audit-transparency").textContent =
     ts != null ? `Transparency score: ${Math.round(ts * 100)}%` : "";
+}
+
+function renderTheses(theses, positions) {
+  const card = $("theses-card");
+  const rows = Object.values(theses || {});
+  if (!rows.length) { card.style.display = "none"; return; }
+  card.style.display = "";
+  const priceBy = {};
+  (positions || []).forEach((p) => { priceBy[p.symbol] = Number(p.current_price) || 0; });
+  $("theses-body").innerHTML = rows.map((t) => {
+    const px = priceBy[t.symbol] || 0;
+    const tgt = t.target_price, stop = t.stop_price;
+    const hit = tgt && px && px >= Number(tgt);
+    const brk = stop && px && px <= Number(stop);
+    return `<tr>
+      <td class="mono">${t.symbol}</td>
+      <td><span class="tag">${t.conviction || "—"}</span></td>
+      <td class="mono ${hit ? "pos" : ""}">${tgt ? money(tgt) + (hit ? " ✓" : "") : "—"}</td>
+      <td class="mono ${brk ? "neg" : ""}">${stop ? money(stop) + (brk ? " ⚠" : "") : "—"}</td>
+      <td class="small">${t.thesis || ""}</td>
+    </tr>`;
+  }).join("");
+}
+
+async function loadJournal() {
+  let rows = [];
+  try {
+    const res = await fetch(`data/journal.jsonl?t=${Date.now()}`);
+    if (!res.ok) throw new Error("no journal");
+    rows = res.text ? (await res.text()).trim().split("\n").filter(Boolean).map((l) => JSON.parse(l)) : [];
+  } catch { rows = []; }
+  const card = $("journal-card");
+  if (!rows.length) { card.style.display = "none"; return; }
+  card.style.display = "";
+  rows.reverse();
+  $("journal-count").textContent = `${rows.length} cycles`;
+  $("journal-list").innerHTML = rows.slice(0, 40).map((r) => {
+    const when = r.t ? new Date(r.t).toLocaleString() : "";
+    const memo = (r.memo || "").trim();
+    return `<details class="journal-entry">
+      <summary><span class="mono small">${when}</span> — <strong>${r.actions || "no action"}</strong>
+        <span class="muted small">${(r.summary || "").slice(0, 120)}</span></summary>
+      ${memo ? `<pre class="memo-text">${memo.replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c]))}</pre>` : ""}
+      ${r.audit ? `<p class="muted small"><strong>Auditor:</strong> ${r.audit}</p>` : ""}
+    </details>`;
+  }).join("");
 }
 
 function renderValueScan(scan) {

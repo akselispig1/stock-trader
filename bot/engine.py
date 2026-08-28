@@ -16,6 +16,9 @@ from .auditor import Auditor
 from .brain import Brain
 from .config import Config
 from .fundamentals import ValueScout
+from .theses import (append_journal, load_theses, prune, record_entry,
+                      recent_journal, save_theses)
+from .theses import summarize as summarize_theses
 from .triage import Triage
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "docs", "data")
@@ -72,6 +75,7 @@ class Engine:
         self.scout = ValueScout(cfg)
         self._scout_cost = 0.0  # fundamentals scan cost incurred this cycle (0 if cached)
         self._last_scan: dict | None = None
+        self._theses: dict = {}
 
     # ---- capital cap -----------------------------------------------------
     def effective_funds(self, account: dict, positions: list[dict]) -> tuple[float, float, float]:
@@ -111,6 +115,11 @@ class Engine:
             lines += [
                 f"MANAGED BUDGET: {cap:,.0f} {self.cfg.capital_currency} — you must keep "
                 f"TOTAL invested within this budget. Size every position accordingly.",
+                f"TARGET BOOK SHAPE: about {self.cfg.target_positions} positions "
+                f"(~{100.0 / max(1, self.cfg.target_positions):.0f}% of budget each, "
+                f"~${cap / max(1, self.cfg.target_positions):,.0f} per full-weight name; "
+                f"hard cap {self.cfg.max_allocation_pct_per_symbol:.0f}% per symbol). "
+                f"Many medium/small positions, diversified across sectors — not a few big bets.",
                 f"Invested so far: ${invested:,.2f} | Available to invest: ${cash:,.2f}",
                 f"(Underlying paper account equity is ${_f(account.get('equity')):,.2f}, "
                 f"but treat {cap:,.0f} {self.cfg.capital_currency} as your entire capital.)",
@@ -188,6 +197,16 @@ class Engine:
             except Exception as e:
                 print(f"[engine] value scout unavailable: {e}")
 
+        # The bot's own memory: per-position theses, then its recent decisions.
+        theses = load_theses()
+        self._theses = theses
+        tsum = summarize_theses(theses, positions)
+        if tsum:
+            lines.append(tsum)
+        jrn = recent_journal(5)
+        if jrn:
+            lines.append(jrn)
+
         return "\n".join(lines), account, positions
 
     # ---- risk checks -----------------------------------------------------
@@ -223,6 +242,10 @@ class Engine:
                 "notional_usd": notional,
                 "reasoning": order.get("reasoning", ""),
                 "confidence": _f(order.get("confidence")),
+                "thesis": order.get("thesis", ""),
+                "target_price": order.get("target_price"),
+                "stop_price": order.get("stop_price"),
+                "conviction": order.get("conviction", "medium"),
                 "status": "pending",
                 "detail": "",
             }
@@ -434,6 +457,7 @@ class Engine:
             "audit": audit,
             "skipped": skipped,
             "fundamentals": self._last_scan,
+            "theses": self._theses,
         }
         with open(STATE_PATH, "w") as f:
             json.dump(state, f, indent=2)
@@ -451,6 +475,28 @@ class Engine:
         }
         with open(HISTORY_PATH, "a") as f:
             f.write(json.dumps(history_row) + "\n")
+
+        # Readable research journal - for you AND for the bot's own continuity.
+        acted = [o for o in checked
+                 if o["status"] in ("executed", "proposed", "dry_run", "vetoed")]
+        append_journal({
+            "t": now,
+            "skipped": skipped,
+            "actions": ", ".join(
+                f"{o['side'].upper()} {o['symbol']} ${o['notional_usd']:,.0f}" for o in acted
+            ) or "no action",
+            "summary": plan.get("market_summary", ""),
+            "memo": memo,
+            "orders": [
+                {k: o.get(k) for k in
+                 ("symbol", "side", "notional_usd", "status", "thesis",
+                  "target_price", "stop_price", "conviction", "reasoning", "detail")}
+                for o in checked
+            ],
+            "audit": (audit or {}).get("summary") if audit else None,
+            "net_pnl": net_pnl,
+            "ai_cost_total": ai_cost_total,
+        })
 
         return state
 
@@ -561,6 +607,18 @@ class Engine:
                 positions = self.alpaca.positions()
             except AlpacaError:
                 pass
+
+        # Thesis memory: record the plan behind each executed buy, and drop
+        # theses for names no longer held, so next cycle can judge holdings
+        # against their own stated target/stop instead of starting blank.
+        theses = self._theses or load_theses()
+        price_by_sym = {p["symbol"]: _f(p.get("current_price")) for p in positions}
+        for o in checked:
+            if o["status"] == "executed" and o["side"] == "buy":
+                record_entry(theses, o, fill_price=price_by_sym.get(o["symbol"]))
+        theses = prune(theses, {p["symbol"] for p in positions})
+        save_theses(theses)
+        self._theses = theses
 
         # AI operating cost for this cycle, and the running P&L-vs-cost ledger.
         cycle_cost = (triage_cost + self._scout_cost
