@@ -151,6 +151,48 @@ When you're ready to trade real money:
 
 ---
 
+## Running it reliably (always-on host)
+
+GitHub's cron drops runs — see the caveat above. To have the bot actually run on
+schedule, run it as a normal long-lived process instead:
+
+```bash
+python -m bot.serve          # trading loop + live dashboard on $PORT
+python -m bot.serve --no-web # loop only
+```
+
+`bot.serve` decides for itself when to trade (checks the market clock, runs a
+cycle every `CYCLE_MINUTES`, backs off when closed) and **serves the dashboard
+from its own filesystem**. That second part matters: a hosted process can't
+commit data back to GitHub, so instead of pushing to Pages it just serves its
+own always-current copy. One URL, never stale, no git involved.
+`/healthz` returns loop status (cycles run, last result, last error).
+
+A failed cycle is logged and the loop continues — one bad API call never stops
+the bot.
+
+### Where to run it
+
+| Option | Cost | Notes |
+|---|---|---|
+| **Your own computer** | free | Simplest. `python -m bot.serve`, or a cron / Task Scheduler entry running `python -m bot.run`. Only trades while the machine is on. |
+| **Render free web service** | free (750 h/mo) | Blueprint included (`render.yaml`). ⚠️ Free services **sleep after ~15 min without HTTP traffic**, which pauses the loop — point a free uptime pinger (e.g. UptimeRobot) at `/healthz` every 5 min to keep it awake. |
+| **Any container host / VPS** | varies | `Dockerfile` included. Fly.io **no longer has a free tier** (trial only, then ~$2/mo for a small always-on machine); Render background workers are ~$7/mo. |
+
+**Deploy to Render:** New → Blueprint → pick this repo → set `ANTHROPIC_API_KEY`,
+`ALPACA_API_KEY`, `ALPACA_SECRET_KEY` in the dashboard (the blueprint marks them
+`sync: false` so they are never stored in the repo). Everything else has a
+default you can edit there.
+
+Extra settings for this mode: `CYCLE_MINUTES` (default 30) and
+`CLOSED_POLL_MINUTES` (default 30).
+
+> Running both the GitHub cron and an always-on host at once is fine but
+> wasteful — they'd duplicate cycles. Pick one; disable the workflow's
+> `schedule:` block if you move to a host.
+
+---
+
 ## Tuning the bot
 
 All optional — set these as repo **Variables** (not secrets). Defaults are in

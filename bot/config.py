@@ -115,6 +115,13 @@ class Config:
     triage_enabled: bool = field(default_factory=lambda: _bool("TRIAGE_ENABLED", True))
     triage_model: str = field(default_factory=lambda: os.getenv("TRIAGE_MODEL", "claude-haiku-4-5").strip())
 
+    # --- Always-on runner (bot.serve) ---
+    # How often to run a cycle while the market is open, and how often to
+    # re-check the clock while it is closed. Only used by bot.serve; the
+    # GitHub cron has its own schedule.
+    cycle_minutes: float = field(default_factory=lambda: _float("CYCLE_MINUTES", 30.0))
+    closed_poll_minutes: float = field(default_factory=lambda: _float("CLOSED_POLL_MINUTES", 30.0))
+
     # --- Universe ---
     # Diversified across sectors + ETFs so the bot isn't trapped in correlated
     # mega-cap AI: tech, financials, healthcare, energy, staples, plus broad and

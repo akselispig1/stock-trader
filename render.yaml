@@ -1,0 +1,44 @@
+# Render blueprint: one free web service that runs the trading loop AND serves
+# the dashboard. A hosted process cannot commit data back to GitHub, so the
+# service serves its own always-current copy instead - the Render URL is the
+# live dashboard.
+#
+# Deploy: Render -> New -> Blueprint -> pick this repo. Then set the three
+# secret env vars below in the dashboard (they are intentionally not stored
+# in this file).
+#
+# NOTE on the free plan: free web services sleep after ~15 minutes with no HTTP
+# traffic, which pauses the loop. Point a free uptime pinger (e.g. UptimeRobot)
+# at https://<your-service>.onrender.com/healthz every 5 minutes to keep it
+# awake. 750 free instance-hours/month is enough for one always-on service.
+services:
+  - type: web
+    name: ai-stockbroker
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m bot.serve
+    healthCheckPath: /healthz
+    envVars:
+      # Secrets - set these in the Render dashboard, never in this file.
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ALPACA_API_KEY
+        sync: false
+      - key: ALPACA_SECRET_KEY
+        sync: false
+      # Safe defaults, editable in the Render dashboard.
+      - key: TRADING_MODE
+        value: paper
+      - key: RISK_LEVEL
+        value: high
+      - key: CAPITAL_CAP
+        value: "1000"
+      - key: CAPITAL_CURRENCY
+        value: CHF
+      - key: CLAUDE_MODEL
+        value: claude-sonnet-5
+      - key: CYCLE_MINUTES
+        value: "30"
+      - key: PYTHON_VERSION
+        value: "3.12"
