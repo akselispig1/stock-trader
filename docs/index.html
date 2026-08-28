@@ -26,6 +26,14 @@
   <main>
     <p id="updated-line" class="updated-line">Loading latest run…</p>
 
+    <!-- Tabs -->
+    <div class="tabs" role="tablist">
+      <button class="tab is-active" data-panel="trading" role="tab">💰 Paper trading</button>
+      <button class="tab" data-panel="research" role="tab">🔬 Research runs</button>
+    </div>
+
+    <!-- ============ PAPER TRADING (what actually happened) ============ -->
+    <div id="panel-trading" class="panel">
     <!-- Portfolio stats -->
     <section class="stat-grid" id="stat-grid" aria-label="Portfolio summary">
       <div class="stat"><span class="stat-label">Equity</span><span class="stat-value" id="stat-equity">—</span></div>
@@ -33,6 +41,8 @@
       <div class="stat"><span class="stat-label">Day P&amp;L</span><span class="stat-value" id="stat-daypl">—</span></div>
       <div class="stat"><span class="stat-label">Buying power</span><span class="stat-value" id="stat-bp">—</span></div>
     </section>
+    <p id="pnl-line" class="pnl-line"></p>
+
     <p id="pnl-line" class="pnl-line"></p>
 
     <!-- Equity curve -->
@@ -47,8 +57,62 @@
       </div>
     </section>
 
-    <div class="two-col">
-      <!-- Latest AI decision -->
+    
+    <!-- Positions -->
+      <section class="card">
+        <div class="card-head">
+          <h2>Positions</h2>
+          <span class="muted" id="positions-source">from last bot run</span>
+        </div>
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead>
+              <tr><th>Symbol</th><th>Qty</th><th>Value</th><th>P&amp;L</th></tr>
+            </thead>
+            <tbody id="positions-body"><tr><td colspan="4" class="muted center">No positions.</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+
+    <!-- Position theses -->
+    <section class="card" id="theses-card" style="display:none">
+      <div class="card-head"><h2>📌 Position theses</h2></div>
+      <p class="muted small">
+        Why the AI owns each position, and the plan it set at entry. Every cycle it
+        judges each holding against <em>its own</em> target and stop — so it takes
+        profits and cuts losers instead of drifting.
+      </p>
+      <div class="table-scroll">
+        <table class="data-table">
+          <thead><tr><th>Symbol</th><th>Conviction</th><th>Target</th><th>Stop</th><th>Thesis</th></tr></thead>
+          <tbody id="theses-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    
+    <!-- Executed trades -->
+    <section class="card" id="fills-card">
+      <div class="card-head">
+        <h2>✅ Executed trades</h2>
+        <span class="muted" id="fills-count"></span>
+      </div>
+      <p class="muted small">
+        Only orders that were <strong>actually sent to Alpaca</strong> — these appear in
+        your paper account. Proposals from research-only cycles live on the Research tab.
+      </p>
+      <div class="table-scroll">
+        <table class="data-table">
+          <thead><tr><th>When</th><th>Side</th><th>Symbol</th><th>Size</th><th>Why</th></tr></thead>
+          <tbody id="fills-body"><tr><td colspan="5" class="muted center">No executed trades recorded yet.</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+    </div>
+
+    <!-- ============ RESEARCH RUNS (thinking, incl. dry runs) ============ -->
+    <div id="panel-research" class="panel" hidden>
+    <!-- Latest AI decision -->
       <section class="card">
         <div class="card-head">
           <h2>Latest AI decision</h2>
@@ -71,23 +135,6 @@
         </div>
       </section>
 
-      <!-- Positions -->
-      <section class="card">
-        <div class="card-head">
-          <h2>Positions</h2>
-          <span class="muted" id="positions-source">from last bot run</span>
-        </div>
-        <div class="table-scroll">
-          <table class="data-table">
-            <thead>
-              <tr><th>Symbol</th><th>Qty</th><th>Value</th><th>P&amp;L</th></tr>
-            </thead>
-            <tbody id="positions-body"><tr><td colspan="4" class="muted center">No positions.</td></tr></tbody>
-          </table>
-        </div>
-      </section>
-    </div>
-
     <!-- Independent AI auditor -->
     <section class="card" id="audit-card" style="display:none">
       <div class="card-head">
@@ -103,36 +150,7 @@
       <div id="audit-transparency" class="muted small"></div>
     </section>
 
-    <!-- Position theses -->
-    <section class="card" id="theses-card" style="display:none">
-      <div class="card-head"><h2>📌 Position theses</h2></div>
-      <p class="muted small">
-        Why the AI owns each position, and the plan it set at entry. Every cycle it
-        judges each holding against <em>its own</em> target and stop — so it takes
-        profits and cuts losers instead of drifting.
-      </p>
-      <div class="table-scroll">
-        <table class="data-table">
-          <thead><tr><th>Symbol</th><th>Conviction</th><th>Target</th><th>Stop</th><th>Thesis</th></tr></thead>
-          <tbody id="theses-body"></tbody>
-        </table>
-      </div>
-    </section>
-
-    <!-- Research journal -->
-    <section class="card" id="journal-card" style="display:none">
-      <div class="card-head">
-        <h2>📓 Research journal</h2>
-        <span class="muted" id="journal-count"></span>
-      </div>
-      <p class="muted small">
-        Every cycle the AI researched and what it concluded — newest first. The bot
-        reads its own recent entries too, so it keeps continuity instead of starting
-        from scratch each time.
-      </p>
-      <div id="journal-list"></div>
-    </section>
-
+    
     <!-- Fundamental value scout -->
     <section class="card" id="value-card" style="display:none">
       <div class="card-head">
@@ -152,6 +170,22 @@
       </div>
     </section>
 
+    
+    <!-- Research journal -->
+    <section class="card" id="journal-card" style="display:none">
+      <div class="card-head">
+        <h2>📓 Research journal</h2>
+        <span class="muted" id="journal-count"></span>
+      </div>
+      <p class="muted small">
+        Every cycle the AI researched and what it concluded — newest first. The bot
+        reads its own recent entries too, so it keeps continuity instead of starting
+        from scratch each time.
+      </p>
+      <div id="journal-list"></div>
+    </section>
+
+    
     <!-- Interactive tools -->
     <div class="two-col">
       <!-- Ask the AI -->
@@ -194,6 +228,8 @@
         </div>
         <p id="connect-status" class="muted small"></p>
       </section>
+    </div>
+
     </div>
 
     <section class="card config-card">
