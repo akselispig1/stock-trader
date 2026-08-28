@@ -14,10 +14,19 @@ on:
         type: boolean
         default: false
   schedule:
-    # GitHub cron is UTC. 13:30-20:00 UTC on weekdays roughly covers the
-    # 09:30-16:00 ET session during US Eastern Daylight Time. Runs every 30
-    # minutes. (During EST/winter, shift one hour earlier if you like.)
-    - cron: "0,30 13-20 * * 1-5"
+    # GitHub cron is UTC. 13:00-21:00 UTC on weekdays covers the 09:30-16:00 ET
+    # session in both EDT and EST, so no seasonal edit is needed.
+    #
+    # NOTE: GitHub's scheduler is BEST-EFFORT. Scheduled runs are frequently
+    # delayed by an hour or more and are silently DROPPED entirely under load -
+    # observed here as whole trading days with zero runs. Asking for a tick
+    # every 15 minutes does not mean 15-minute trading; it means that when most
+    # ticks are dropped, some still land. The cheap triage gate keeps the cost
+    # of extra ticks near zero (~$0.002 for a quiet cycle).
+    #
+    # If you need genuinely reliable timing, run `python -m bot.run` from a real
+    # scheduler on an always-on host - see the README.
+    - cron: "*/15 13-21 * * 1-5"
 
 # Never let two cycles run at once (they'd both try to trade + commit).
 concurrency:

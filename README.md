@@ -28,7 +28,7 @@ It runs entirely on GitHub, free:
 
 ```
                  ┌──────────────── GitHub Actions (the brain) ────────────────┐
-                 │  every 30 min in market hours, or on demand                 │
+                 │  on a schedule in market hours, or on demand                │
    Alpaca  ─────►│  1. read account + positions + watchlist prices + news      │
    (paper)       │  2. Claude researches (web search) & writes a memo          │
                  │  3. Claude emits a structured trade plan                    │
@@ -99,7 +99,8 @@ Go to the **Actions** tab → **AI Stockbroker** → **Run workflow**. Options:
 When it finishes, refresh your dashboard — you'll see the AI's market summary,
 its full research memo, the orders, and your updated paper portfolio.
 
-After that it runs **automatically** every 30 minutes during US market hours.
+After that it runs **automatically** during US market hours — though see the
+scheduling caveat below: GitHub's cron is best-effort, not a reliable clock.
 
 ---
 
@@ -161,7 +162,7 @@ All optional — set these as repo **Variables** (not secrets). Defaults are in
 | `LIVE_REQUIRE_APPROVAL` | `true` | In live mode, require dashboard approval per trade |
 | `CAPITAL_CAP` | `1000` | Bot behaves as if it holds only this much, whatever the real paper balance is. `0` = trade the full account |
 | `CAPITAL_CURRENCY` | `CHF` | Label for the cap on the dashboard (the Alpaca account itself is USD) |
-| `CLAUDE_MODEL` | `claude-opus-5` | The AI model. `claude-sonnet-5` is ~60% cheaper; `claude-haiku-4-5` cheapest (no web search) |
+| `CLAUDE_MODEL` | `claude-sonnet-5` | The AI model. `claude-opus-5` is the most capable (~2.5x the cost); `claude-haiku-4-5` cheapest (no web search) |
 | `ENABLE_WEB_SEARCH` | `true` | Let the AI search the web for live news/sentiment |
 | `ENABLE_AUDITOR` | `true` | A second, independent AI audits every trade before it runs and can veto unjustified ones |
 | `TRIAGE_ENABLED` | `true` | A cheap Haiku "is this worth a full run?" gate that skips quiet cycles (~$0.002 vs ~$0.15) to save cost |
@@ -181,14 +182,26 @@ physically cannot place an order that breaks them.
 
 ### Schedule
 
-The cron in `.github/workflows/trader.yml` runs every 30 min, `13:30–20:00 UTC`
-on weekdays, which covers US market hours during Eastern *Daylight* time. In
-winter (EST) shift it an hour earlier if you want the full session. Note GitHub's
-scheduled Actions can be delayed at busy times and pause after ~60 days of repo
-inactivity — fine for experimenting, but for reliable **24/7** operation, run
-`python -m bot.run` on a cheap always-on host (Render / Fly / Railway / a cron on
-any VM) with the same environment variables. The dashboard keeps working exactly
-the same.
+The cron in `.github/workflows/trader.yml` asks for a tick every 15 minutes,
+`13:00–21:00 UTC` on weekdays — a window that covers the US session in both EDT
+and EST, so there is nothing to change seasonally.
+
+> ### ⚠️ GitHub's scheduler is best-effort, and it shows
+> Scheduled Actions are **not** a reliable clock. In practice runs here have been
+> delayed by 1–2 hours, fired outside the requested window, and been **dropped
+> entirely for a whole trading day**. The 15-minute cadence is deliberate
+> over-subscription: when most ticks are dropped, some still land. The cheap
+> triage gate keeps the cost of the extra ticks near zero.
+>
+> **If you want dependable timing, don't use GitHub cron.** Run
+> `python -m bot.run` from a real scheduler on an always-on host (Render / Fly /
+> Railway / a cron on any VM) with the same environment variables. The dashboard
+> and all the data files keep working exactly the same — only the trigger moves.
+>
+> You can always force a cycle immediately: **Actions → AI Stockbroker → Run
+> workflow**.
+
+Scheduled workflows also pause after ~60 days of repo inactivity.
 
 ---
 
