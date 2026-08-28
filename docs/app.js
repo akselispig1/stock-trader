@@ -158,6 +158,24 @@ function renderDecision(s) {
   document.querySelectorAll(".approve-btn").forEach((b) =>
     b.addEventListener("click", () => approveOrder(b))
   );
+
+  // Make it unmistakable when orders were NOT actually sent to the broker,
+  // so the dashboard is never mistaken for the real account activity.
+  const notSent = orders.filter((o) => ["dry_run", "deferred", "proposed"].includes(o.status));
+  const banner = $("orders-note");
+  if (notSent.length === orders.length && orders.length) {
+    const why = {
+      dry_run: "this was a <strong>Research only</strong> run",
+      deferred: "the market was closed",
+      proposed: "live mode needs your approval",
+    }[notSent[0].status] || "they were not sent";
+    banner.style.display = "";
+    banner.innerHTML = `⚠️ <strong>These orders were NOT placed</strong> — ${why}, so nothing was
+      sent to Alpaca and they will not appear in your broker account. The Positions
+      panel below shows what is actually held.`;
+  } else {
+    banner.style.display = "none";
+  }
 }
 
 function renderPnlLine(a) {

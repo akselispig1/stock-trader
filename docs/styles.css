@@ -267,3 +267,15 @@ main {
 .journal-entry summary { cursor: pointer; font-size: 13.5px; }
 .journal-entry summary::marker { color: var(--text-muted); }
 .journal-entry .memo-text { max-height: 320px; }
+
+/* "orders were not actually placed" warning */
+.orders-note {
+  font-size: 12.5px;
+  background: var(--neg-weak);
+  color: var(--neg);
+  border: 1px solid color-mix(in srgb, var(--neg) 30%, transparent);
+  border-radius: 9px;
+  padding: 9px 12px;
+  margin: 0 0 10px;
+}
+.orders-note strong { font-weight: 700; }
