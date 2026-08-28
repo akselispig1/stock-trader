@@ -1,5 +1,5 @@
 {
-  "updated_at": null,
+  "updated_at": "2026-08-28T18:37:45.416469+00:00",
   "config": {
     "trading_mode": "paper",
     "model": "claude-sonnet-5",
@@ -27,7 +27,7 @@
       "XLE",
       "XLF"
     ],
-    "dry_run": true,
+    "dry_run": false,
     "live_require_approval": true,
     "capital_cap": 1000.0,
     "capital_currency": "CHF",
@@ -47,77 +47,77 @@
       "allow_short": false
     }
   },
-  "market_open": false,
+  "market_open": true,
   "account": {
-    "equity": 99999.83,
+    "equity": 100016.92,
     "cash": 99100.86,
-    "buying_power": 398920.56,
-    "portfolio_value": 99999.83,
-    "last_equity": 100003.5895830694,
+    "buying_power": 398968.41,
+    "portfolio_value": 100016.92,
+    "last_equity": 99999.79990682514,
     "capital_cap": 1000.0,
     "capital_currency": "CHF",
     "effective_equity": 1000.0,
-    "effective_cash": 101.03023900000005,
-    "invested": 898.969761,
+    "effective_cash": 83.940744,
+    "invested": 916.059256,
     "book_equity": 1000.0,
-    "net_book_equity": 1000.0,
+    "net_book_equity": 999.996751,
     "gross_pnl": 0.0,
-    "net_pnl": 0.0,
-    "ai_cost_cycle": 0.0,
-    "ai_cost_total": 0.0
+    "net_pnl": -0.003249,
+    "ai_cost_cycle": 0.003249,
+    "ai_cost_total": 0.003249
   },
   "positions": [
     {
       "symbol": "AMZN",
       "qty": 0.999543922,
-      "market_value": 256.283062,
+      "market_value": 265.044064,
       "avg_entry_price": 258.728,
-      "current_price": 256.4,
-      "unrealized_pl": -2.326938,
-      "unrealized_plpc": -0.009
+      "current_price": 265.165,
+      "unrealized_pl": 6.434064,
+      "unrealized_plpc": 0.02488
     },
     {
       "symbol": "GOOGL",
       "qty": 0.795032438,
-      "market_value": 271.06631,
+      "market_value": 275.37141,
       "avg_entry_price": 341.572,
-      "current_price": 340.95,
-      "unrealized_pl": -0.49451,
-      "unrealized_plpc": -0.00182
+      "current_price": 346.365,
+      "unrealized_pl": 3.81059,
+      "unrealized_plpc": 0.01403
     },
     {
       "symbol": "META",
       "qty": 0.277780671,
-      "market_value": 158.696097,
+      "market_value": 160.157224,
       "avg_entry_price": 575.958,
-      "current_price": 571.3,
-      "unrealized_pl": -1.293903,
-      "unrealized_plpc": -0.00809
+      "current_price": 576.56,
+      "unrealized_pl": 0.167224,
+      "unrealized_plpc": 0.00105
     },
     {
       "symbol": "MSFT",
       "qty": 0.243058087,
-      "market_value": 122.440511,
+      "market_value": 125.123873,
       "avg_entry_price": 493.668,
-      "current_price": 503.75,
-      "unrealized_pl": 2.450511,
-      "unrealized_plpc": 0.02042
+      "current_price": 514.79,
+      "unrealized_pl": 5.133873,
+      "unrealized_plpc": 0.04279
     },
     {
       "symbol": "SPY",
       "qty": 0.117454964,
-      "market_value": 90.483781,
+      "market_value": 90.362685,
       "avg_entry_price": 766.166,
-      "current_price": 770.37,
-      "unrealized_pl": 0.493781,
-      "unrealized_plpc": 0.00549
+      "current_price": 769.339,
+      "unrealized_pl": 0.372685,
+      "unrealized_plpc": 0.00414
     }
   ],
-  "market_summary": "Fresh start \u2014 P&L and AI-cost tracking reset to zero. The next scheduled run begins the new record.",
-  "memo": "History reset on 2026-08-28. Positions below are real and still held; only the measurement baseline was cleared. The equity curve, executed-trades log and position theses start filling from the next run.\n\nPrevious history is archived in docs/data/archive/.",
+  "market_summary": "Triage skipped a full research cycle to save cost \u2014 Book is 92% deployed with only $84 cash left and no material moves (all positions <5% from entry, most <2%). No fresh catalyst on holdings: AMZN +2.5%, GOOGL +1.4%, META flat, MSFT +4.3%, SPY +0.4%. Headlines are generic (fed speak, chip deals, rate odds) with no direct position impact. Recent decision to trim tech and buy UNH was executed; no new signal to act. Hold and monitor until either (a) a holding breaks 2% loss threshold, (b) real deployment opportunity emerges, or (c) material news breaks on UNH entry or core holdings.",
+  "memo": "Cheap triage gate: no full research this cycle.\n\nReason: Book is 92% deployed with only $84 cash left and no material moves (all positions <5% from entry, most <2%). No fresh catalyst on holdings: AMZN +2.5%, GOOGL +1.4%, META flat, MSFT +4.3%, SPY +0.4%. Headlines are generic (fed speak, chip deals, rate odds) with no direct position impact. Recent decision to trim tech and buy UNH was executed; no new signal to act. Hold and monitor until either (a) a holding breaks 2% loss threshold, (b) real deployment opportunity emerges, or (c) material news breaks on UNH entry or core holdings.",
   "orders": [],
   "audit": null,
-  "skipped": false,
+  "skipped": true,
   "fundamentals": {
     "generated_at": "2026-08-27T22:56:01.607784+00:00",
     "model": "claude-sonnet-5",
