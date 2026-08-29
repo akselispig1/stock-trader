@@ -5,15 +5,17 @@ search, and price data), decides what to trade, and places the trades through
 your **Alpaca** brokerage account — while a clean web **dashboard** shows you
 everything it's doing.
 
-It runs entirely on GitHub, free:
+Two pieces:
 
-- **The brain** is a scheduled **GitHub Action** that runs a research → decide →
-  trade cycle during market hours (and on demand). This is what makes it a
-  hands-off, "runs by itself" bot — and the piece you'll later point at an
-  always-on host for true 24/7.
-- **The dashboard** is a **GitHub Pages** website — the link you open in a
-  browser to watch the bot work, see its reasoning, and (in live mode) approve
-  trades.
+- **The brain** is a long-lived process (`python -m bot.serve`, or the
+  `run-local` launcher) that runs a research → decide → trade cycle during
+  market hours. Start it with one command on your own computer, or host it.
+- **The dashboard** is a web page it serves at `http://localhost:8080`, showing
+  what it's doing, its reasoning, and (in live mode) trades awaiting approval.
+
+A **GitHub Action** can also run a cycle on demand from the Actions tab, and
+publishes the dashboard to **GitHub Pages**. Its recurring schedule ships
+**disabled** — see [Don't run two of them](#dont-run-two-of-them).
 
 > ### ⚠️ Read this first
 > This is an educational project, **not financial advice**. It starts in
@@ -99,8 +101,9 @@ Go to the **Actions** tab → **AI Stockbroker** → **Run workflow**. Options:
 When it finishes, refresh your dashboard — you'll see the AI's market summary,
 its full research memo, the orders, and your updated paper portfolio.
 
-After that it runs **automatically** during US market hours — though see the
-scheduling caveat below: GitHub's cron is best-effort, not a reliable clock.
+That's a one-off run. For the bot to trade **continuously** during market
+hours, start the always-on process — see below. The workflow's recurring
+schedule is disabled on purpose.
 
 ---
 
@@ -199,9 +202,20 @@ default you can edit there.
 Extra settings for this mode: `CYCLE_MINUTES` (default 30) and
 `CLOSED_POLL_MINUTES` (default 30).
 
-> Running both the GitHub cron and an always-on host at once is fine but
-> wasteful — they'd duplicate cycles. Pick one; disable the workflow's
-> `schedule:` block if you move to a host.
+### Don't run two of them
+
+> ⚠️ **Never run the GitHub cron and an always-on process against the same
+> Alpaca account.** This is worse than merely wasteful. `ledger.json` and
+> `theses.json` are **per-instance** files: each copy measures P&L from its own
+> equity baseline while the *other* instance is also moving that equity, so both
+> sets of numbers silently become wrong, and each sees the other's positions as
+> unexplained holdings with no thesis.
+>
+> The workflow's `schedule:` is therefore **disabled by default** and the
+> always-on process owns the account. Manual "Run workflow" runs stay safe as
+> long as the local process is stopped. If you'd rather have GitHub drive it,
+> stop the local process first, then uncomment `schedule:` in
+> `.github/workflows/trader.yml`.
 
 ---
 
@@ -224,7 +238,7 @@ All optional — set these as repo **Variables** (not secrets). Defaults are in
 | `ENABLE_FUNDAMENTALS` | `true` | Cached (~daily) AI "value scout" that flags names trading below their fundamentals as buy candidates |
 | `STOP_LOSS_REVIEW_PCT` | `8` | Positions down more than this % are flagged to the AI to decide cut-vs-hold with reasoning |
 | `STOP_LOSS_HARD_PCT` | `0` | Dumb safety backstop: force-close a position down more than this % regardless of the AI (`0` = off) |
-| `RISK_LEVEL` | `medium`* | Preset for the guardrails: `low` / `medium` / `semi-high` / `high`. Higher = more concentration per name and less cash held back. The specific vars below override it. (*The GitHub Actions workflow defaults this to `semi-high`.) |
+| `RISK_LEVEL` | `medium`* | Preset for the guardrails: `low` / `medium` / `semi-high` / `high`. Higher = **more aggressive** (more fully invested, more positions, more trades per cycle) — *not* more concentrated: the per-symbol cap stays modest (15–22%) at every level so the book stays a diversified set of medium/small positions. The specific vars below override it. (*The GitHub Actions workflow defaults this to `high`.) |
 | `MAX_ORDERS_PER_RUN` | preset | Cap on trades per cycle (overrides the preset) |
 | `MAX_NOTIONAL_PER_ORDER` | `1000` | Max dollars per single order |
 | `MAX_ALLOCATION_PCT_PER_SYMBOL` | `25` | Max % of equity in any one symbol |
