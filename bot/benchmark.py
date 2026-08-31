@@ -100,21 +100,29 @@ def backfill_baseline_price(ledger: dict, bench_price: float | None,
 
 
 def compute(ledger: dict, equity: float, net_pnl: float,
-            bench_price: float | None) -> dict | None:
+            bench_price: float | None, capital_base: float | None = None) -> dict | None:
     """Bot return vs benchmark return over the same period.
 
     `net_pnl` is gross P&L already reduced by cumulative AI cost, so net alpha
     is the honest figure: what the AI earned above the index after paying for
     itself.
+
+    `capital_base` is the money the bot actually manages, and is the correct
+    denominator for a percentage return. It matters because the equity baseline
+    is the whole brokerage account: with a CAPITAL_CAP of 1,000 against a
+    100,000 paper balance, dividing by the baseline understates every return by
+    100x and makes alpha read as failure however well the book does. Falls back
+    to the baseline only when no cap is set, where the two are the same thing.
     """
     baseline = _f(ledger.get("baseline_equity"))
     base_price = _f(ledger.get("benchmark_baseline_price"))
     if baseline <= 0 or base_price <= 0 or not bench_price or bench_price <= 0:
         return None
+    denom = _f(capital_base) if _f(capital_base) > 0 else baseline
 
     gross_pnl = equity - baseline
-    bot_pct = gross_pnl / baseline * 100.0
-    net_pct = net_pnl / baseline * 100.0
+    bot_pct = gross_pnl / denom * 100.0
+    net_pct = net_pnl / denom * 100.0
     bench_pct = (bench_price - base_price) / base_price * 100.0
 
     return {
@@ -132,8 +140,9 @@ def compute(ledger: dict, equity: float, net_pnl: float,
         "net_alpha_pct": net_pct - bench_pct,
         # The same starting capital left in the benchmark, for a plain-dollar
         # comparison that needs no percentage arithmetic to read.
-        "buy_and_hold_value": baseline * (bench_price / base_price),
-        "book_value": baseline + net_pnl,
+        "capital_base": denom,
+        "buy_and_hold_value": denom * (bench_price / base_price),
+        "book_value": denom + net_pnl,
     }
 
 

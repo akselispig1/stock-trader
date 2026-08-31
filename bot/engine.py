@@ -251,7 +251,10 @@ class Engine:
         equity = _f(account.get("equity"))
         net_pnl = (equity - _f(ledger.get("baseline_equity"))
                    - _f(ledger.get("cumulative_ai_cost")))
-        self._benchmark = benchmark.compute(ledger, equity, net_pnl, price)
+        # Percentage returns must be measured against the capital the bot
+        # actually manages, not the whole paper account behind it.
+        self._benchmark = benchmark.compute(ledger, equity, net_pnl, price,
+                                            capital_base=self.cfg.capital_cap)
         self._correlation = benchmark.book_correlation(bars, positions, sym)
         return benchmark.summarize(self._benchmark, self._correlation)
 
