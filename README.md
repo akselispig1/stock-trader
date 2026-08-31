@@ -262,6 +262,40 @@ behind a green number in a rising market.
 
 ---
 
+## What a risk level actually means
+
+The presets are rows of numbers — allocation cap, cash reserve, position count —
+none of which tell you the thing you want to know before choosing one. Run:
+
+```bash
+python -m bot.projection          # compare all four levels on live prices
+python -m bot.projection --capital 5000
+```
+
+It reads the real volatility of your watchlist and the real average correlation
+between those names, then Monte Carlos a year of daily moves:
+
+```
+level        swing  typical dip  bad year dip  down 20%+     range of outcomes
+low            17%          17%           28%        35%          748 to 1,296
+medium         18%          18%           29%        38%          739 to 1,310
+semi-high      18%          18%           29%        40%          733 to 1,318
+high           18%          18%           30%        41%          729 to 1,324 ←
+```
+
+The dashboard shows the same figures for whichever level is active.
+
+**It predicts risk, never return.** Volatility persists enough to model; future
+returns do not. The simulation assumes **zero drift** on purpose — assuming the
+market's long-run average would produce cheerful numbers that are really just
+that assumption echoed back. Read the middle of the range as "roughly flat
+before whatever the market and the bot's skill add".
+
+The **dip** columns matter more than the range: they are what you would have to
+sit through without switching the bot off.
+
+---
+
 ## Tuning the bot
 
 All optional — set these as repo **Variables** (not secrets). Defaults are in
@@ -281,6 +315,7 @@ All optional — set these as repo **Variables** (not secrets). Defaults are in
 | `ENABLE_FUNDAMENTALS` | `true` | Cached (~daily) AI "value scout" that flags names trading below their fundamentals as buy candidates |
 | `STOP_LOSS_REVIEW_PCT` | `8` | Positions down more than this % are flagged to the AI to decide cut-vs-hold with reasoning |
 | `STOP_LOSS_HARD_PCT` | `0` | Dumb safety backstop: force-close a position down more than this % regardless of the AI (`0` = off) |
+| `ENABLE_PROJECTION` | `true` | Turn the chosen `RISK_LEVEL` into what it actually implies — how much the book swings and how deep the drawdowns get — shown on the dashboard. Risk only; the simulation runs at zero drift so it cannot become a profit forecast. |
 | `ENABLE_SCORECARD` | `true` | Grade every closed position against the target/stop it was opened with, and feed the aggregate record back into the prompt. The bot has no memory between cycles, so this is the only way it can see whether its process has worked. Full history in `docs/data/closed.jsonl`. |
 | `ENABLE_VOL_SIZING` | `true` | Size to equal **risk** rather than equal dollars, and tighten the per-symbol allocation cap for volatile names. Only ever tightens a cap, never widens one. |
 | `ENABLE_REGIME` | `true` | Read trend (benchmark vs its 200-day average) and stress (volatility as a percentile of its own past year) and adjust posture accordingly. |

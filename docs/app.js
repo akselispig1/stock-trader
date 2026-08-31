@@ -55,6 +55,7 @@ async function loadState() {
   renderBenchmark(STATE.benchmark, STATE.correlation);
   renderRegime(STATE.regime);
   renderRecord(STATE.scorecard);
+  renderRiskProjection(STATE.projection);
   renderValueScan(STATE.fundamentals);
   renderTheses(STATE.theses, STATE.positions);
   renderPositions(STATE.positions, "from last bot run");
@@ -277,6 +278,39 @@ function renderRegime(r) {
     ? "Protecting capital: holding more cash and sizing new positions small."
     : r.risk_on ? "Favourable backdrop — willing to deploy into good ideas."
                 : "Cautious — more demanding of any new position.";
+}
+
+/* What the chosen RISK_LEVEL actually implies. Risk, never return: the
+ * simulation runs at zero drift so it cannot become a profit forecast. */
+function renderRiskProjection(p) {
+  const card = $("risk-card");
+  if (!card) return;
+  if (!p) { card.style.display = "none"; return; }
+  card.style.display = "";
+
+  const pill = $("risk-level-pill");
+  pill.textContent = p.level || "—";
+  pill.className = "pill " + (p.bad_drawdown_pct >= 35 ? "audit-reject"
+                    : p.bad_drawdown_pct >= 25 ? "audit-flag" : "audit-approve");
+
+  const n0 = (v) => `${Math.round(Number(v) || 0)}%`;
+  $("risk-vol").textContent = n0(p.annual_vol_pct);
+  $("risk-dip").innerHTML = `<span class="neg">−${n0(p.median_drawdown_pct)}</span>`;
+  $("risk-bad").innerHTML = `<span class="neg">−${n0(p.bad_drawdown_pct)}</span>`;
+
+  const cur = p.currency || "";
+  const worst = (Number(p.capital) || 0) * (1 - (Number(p.bad_drawdown_pct) || 0) / 100);
+  $("risk-plain").innerHTML =
+    `In a bad-but-not-extreme year this book would at some point be worth about ` +
+    `<b class="neg">${money(worst)}</b>, and there is a ` +
+    `<b>${n0(p.prob_down_20)}</b> chance of being down 20% or more at some point. ` +
+    `That is the dip you would have to sit through without switching it off.`;
+
+  $("risk-caveat").textContent =
+    `Assumes zero market drift, so these are risk figures — not a forecast of ` +
+    `profit or loss. Based on the live volatility of the watchlist and an ` +
+    `average correlation of ${(Number(p.avg_corr) || 0).toFixed(2)} between holdings` +
+    (cur ? `, on ${Math.round(p.capital).toLocaleString()} ${cur}.` : ".");
 }
 
 /* The bot's own graded record. It has no memory, so this is how it sees itself. */

@@ -212,6 +212,13 @@ class Config:
     # allocation cap for volatile names. Never widens a cap.
     enable_vol_sizing: bool = field(default_factory=lambda: _bool("ENABLE_VOL_SIZING", True))
 
+    # --- Risk projection ---
+    # Turn the chosen RISK_LEVEL into what it actually implies: how much the
+    # book will swing and how deep the drawdowns get. Risk only - the
+    # simulation assumes zero drift so it cannot become a return forecast.
+    # `python -m bot.projection` compares all four levels on live data.
+    enable_projection: bool = field(default_factory=lambda: _bool("ENABLE_PROJECTION", True))
+
     # --- Market regime ---
     # Trend and volatility-stress read off the benchmark, used to set posture.
     enable_regime: bool = field(default_factory=lambda: _bool("ENABLE_REGIME", True))
@@ -302,6 +309,7 @@ class Config:
             "enable_scorecard": self.enable_scorecard,
             "enable_vol_sizing": self.enable_vol_sizing,
             "enable_regime": self.enable_regime,
+            "enable_projection": self.enable_projection,
             "enforce_exits": self.enforce_exits,
             "daily_deep_cycle": self.daily_deep_cycle,
             "benchmark_symbol": self.benchmark_symbol,
