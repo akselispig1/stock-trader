@@ -11,7 +11,7 @@ import json
 import os
 from datetime import datetime, timezone
 
-from . import benchmark, regime, scorecard, sizing
+from . import benchmark, projection, regime, scorecard, sizing
 from .alpaca import Alpaca, AlpacaError
 from .auditor import Auditor
 from .brain import Brain
@@ -83,6 +83,8 @@ class Engine:
         self._regime: dict | None = None       # trend/stress read on the benchmark
         self._vols: dict[str, float] = {}      # annualised vol per watchlist name
         self._scorecard: dict | None = None    # record over closed positions
+        self._projection: dict | None = None   # risk implied by the active preset
+        self._proj_cache: tuple | None = None  # (vol, capital) the projection is for
 
     # ---- capital cap -----------------------------------------------------
     def effective_funds(self, account: dict, positions: list[dict]) -> tuple[float, float, float]:
@@ -249,6 +251,10 @@ class Engine:
         if bsum:
             lines.append(bsum)
 
+        # What the active risk preset implies for drawdowns. Not shown to the
+        # AI - it describes the settings the owner chose, not a trading input.
+        self._risk_projection(cap if cap is not None else equity)
+
         # What kind of market this is, and the posture that argues for.
         if self.cfg.enable_regime:
             rsum = regime.summarize(self._regime_read())
@@ -268,6 +274,41 @@ class Engine:
             return closes[-1] if closes else None
         except AlpacaError:
             return None
+
+    def _risk_projection(self, capital: float) -> dict | None:
+        """What the ACTIVE risk preset implies for volatility and drawdowns.
+
+        Risk only - the simulation assumes zero drift so no return forecast can
+        creep in. Cached on volatility rounded to the nearest half point: the
+        Monte Carlo costs about a second, and re-running it because a name moved
+        0.1% would be a second wasted every cycle for an identical answer.
+        """
+        if not self.cfg.enable_projection or not self._vols:
+            return None
+        vols = list(self._vols.values())
+        corr = projection.average_correlation(self._bars, list(self._vols))
+        if corr is None:
+            return None
+        preset = {
+            "alloc": self.cfg.max_allocation_pct_per_symbol,
+            "reserve": self.cfg.min_cash_reserve_pct,
+            "positions": self.cfg.target_positions,
+        }
+        vol = projection.portfolio_vol_pct(
+            vols, int(preset["positions"]), 1.0 - preset["reserve"] / 100.0, corr)
+        if vol is None:
+            return None
+
+        key = (round(vol * 2) / 2, round(capital, 2))
+        if self._proj_cache == key and self._projection:
+            return self._projection
+
+        out = projection.project(preset, vols, capital, corr, paths=4000)
+        if out:
+            out["level"] = self.cfg.risk_level
+            out["currency"] = self.cfg.capital_currency
+        self._projection, self._proj_cache = out, key
+        return out
 
     def _regime_read(self) -> dict | None:
         """Trend/stress on the benchmark, from its own long price history."""
@@ -569,6 +610,7 @@ class Engine:
             "benchmark": self._benchmark,
             "correlation": self._correlation,
             "regime": self._regime,
+            "projection": self._projection,
             "scorecard": self._scorecard,
             "volatility": self._vols,
             "fundamentals": self._last_scan,

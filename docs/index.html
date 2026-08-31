@@ -80,6 +80,33 @@
       <p id="regime-posture"></p>
     </section>
 
+    <!-- What the chosen risk level actually implies -->
+    <section class="card" id="risk-card" style="display:none">
+      <div class="card-head">
+        <h2>What your risk level means</h2>
+        <span class="pill" id="risk-level-pill">—</span>
+      </div>
+      <div class="bench-grid">
+        <div class="bench-cell">
+          <span class="bench-label">Yearly swing</span>
+          <span class="bench-value" id="risk-vol">—</span>
+          <span class="muted small">volatility of the book</span>
+        </div>
+        <div class="bench-cell">
+          <span class="bench-label">Typical dip</span>
+          <span class="bench-value" id="risk-dip">—</span>
+          <span class="muted small">in a median year</span>
+        </div>
+        <div class="bench-cell">
+          <span class="bench-label">Bad year dip</span>
+          <span class="bench-value" id="risk-bad">—</span>
+          <span class="muted small">worst 1 year in 10</span>
+        </div>
+      </div>
+      <p id="risk-plain"></p>
+      <p class="muted small" id="risk-caveat"></p>
+    </section>
+
     <!-- Its own graded record -->
     <section class="card" id="record-card" style="display:none">
       <div class="card-head">
