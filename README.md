@@ -3,7 +3,7 @@
 An autonomous AI stockbroker. **Claude** researches the market (live news, web
 search, and price data), decides what to trade, and places the trades through
 your **Alpaca** brokerage account — while a clean web **dashboard** shows you
-everything it's doing.
+everything it's doing, including whether it is actually beating the index.
 
 Two pieces:
 
@@ -186,6 +186,18 @@ writes a `.env` for your keys; fill those in and run it again. Then the bot
 trades on schedule and the dashboard is at **http://localhost:8080**. `.env` is
 git-ignored, so the keys never leave your machine.
 
+### Dedicated laptop as a server
+
+If you're giving the bot its own machine, **[SERVER.md](SERVER.md)** is the full
+runbook — one-command installers for Linux and Windows that start it at boot,
+restart it on crash and stop the laptop sleeping, plus how to check it is
+genuinely working and what to do when it isn't.
+
+```bash
+sudo ./deploy/install-linux.sh                                   # Linux
+powershell -ExecutionPolicy Bypass -File .\deploy\install-windows.ps1  # Windows
+```
+
 ### Where to run it
 
 | Option | Cost | Notes |
@@ -238,6 +250,8 @@ All optional — set these as repo **Variables** (not secrets). Defaults are in
 | `ENABLE_FUNDAMENTALS` | `true` | Cached (~daily) AI "value scout" that flags names trading below their fundamentals as buy candidates |
 | `STOP_LOSS_REVIEW_PCT` | `8` | Positions down more than this % are flagged to the AI to decide cut-vs-hold with reasoning |
 | `STOP_LOSS_HARD_PCT` | `0` | Dumb safety backstop: force-close a position down more than this % regardless of the AI (`0` = off) |
+| `ENABLE_BENCHMARK` | `true` | Measure the book against buy-and-hold in the benchmark each cycle and tell the AI the result. Turning this off removes the only check on whether it is beating the index. |
+| `BENCHMARK_SYMBOL` | `SPY` | What to measure against. Must be a symbol the data API covers; keeping it on the watchlist avoids an extra request. |
 | `RISK_LEVEL` | `medium`* | Preset for the guardrails: `low` / `medium` / `semi-high` / `high`. Higher = **more aggressive** (more fully invested, more positions, more trades per cycle) — *not* more concentrated: the per-symbol cap stays modest (15–22%) at every level so the book stays a diversified set of medium/small positions. The specific vars below override it. (*The GitHub Actions workflow defaults this to `high`.) |
 | `MAX_ORDERS_PER_RUN` | preset | Cap on trades per cycle (overrides the preset) |
 | `MAX_NOTIONAL_PER_ORDER` | `1000` | Max dollars per single order |
