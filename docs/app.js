@@ -52,6 +52,7 @@ async function loadState() {
   renderMarketState(STATE.market_open);
   renderDecision(STATE);
   renderAudit(STATE.audit);
+  renderBenchmark(STATE.benchmark, STATE.correlation);
   renderValueScan(STATE.fundamentals);
   renderTheses(STATE.theses, STATE.positions);
   renderPositions(STATE.positions, "from last bot run");
@@ -198,6 +199,57 @@ function renderPnlLine(a) {
     `Gross P&L <b class="${gross >= 0 ? "pos" : "neg"}">${money(gross)}</b> ` +
     `− AI cost <b>${money(cost)}</b> = ` +
     `Net <b class="${covering ? "pos" : "neg"}">${money(net)}</b> ` + verdict;
+}
+
+/* The scoreboard that decides whether any of this was worth doing: the book's
+ * return against simply buying the benchmark and holding it, after AI cost. */
+function renderBenchmark(b, corr) {
+  const card = $("bench-card");
+  if (!card) return;
+  if (!b) { card.style.display = "none"; return; }
+  card.style.display = "";
+
+  const sign = (v) => (Number(v) >= 0 ? "pos" : "neg");
+  const pp = (v) => `${Number(v) >= 0 ? "+" : ""}${(Number(v) || 0).toFixed(2)}pp`;
+  const sym = b.symbol || "SPY";
+
+  $("bench-sym-label").textContent = `${sym} buy & hold`;
+  $("bench-bot").innerHTML = `<span class="${sign(b.net_return_pct)}">${pct(b.net_return_pct)}</span>`;
+  $("bench-bot-note").textContent = `${pct(b.bot_return_pct)} before AI cost`;
+  $("bench-index").innerHTML =
+    `<span class="${sign(b.benchmark_return_pct)}">${pct(b.benchmark_return_pct)}</span>`;
+
+  const ahead = Number(b.net_alpha_pct) >= 0;
+  $("bench-alpha").innerHTML = `<span class="${ahead ? "pos" : "neg"}">${pp(b.net_alpha_pct)}</span>`;
+
+  // The same statement in plain money, so it needs no percentage arithmetic.
+  const bh = money(b.buy_and_hold_value), bv = money(b.book_value);
+  $("bench-plain").innerHTML = ahead
+    ? `Your starting capital left in ${sym} would be <b>${bh}</b>. The bot made it <b class="pos">${bv}</b>. <span class="pill audit-approve">beating the market</span>`
+    : `Your starting capital left in ${sym} would be <b>${bh}</b>. The bot made it <b class="neg">${bv}</b>. <span class="pill audit-reject">losing to the market</span>`;
+
+  const period = b.baseline_at ? `since ${new Date(b.baseline_at).toLocaleDateString()}` : "";
+  $("bench-period").textContent = b.from_inception === false
+    ? `${period} · benchmark measured from a later date, approximate`
+    : period;
+
+  // How index-like the book is - a book that tracks the index cannot beat it.
+  const el = $("bench-corr");
+  if (!corr) { el.innerHTML = ""; return; }
+  const c = Number(corr.weighted);
+  const cls = c >= 0.85 ? "neg" : c >= 0.7 ? "warn" : "pos";
+  const verdict = c >= 0.85 ? "index-like" : c >= 0.7 ? "partly differentiated" : "differentiated";
+  const names = Object.entries(corr.per_symbol || {})
+    .sort((a, x) => x[1] - a[1])
+    .map(([k, v]) => `${k} ${Number(v).toFixed(2)}`)
+    .join(" · ");
+  const warn = c >= 0.85
+    ? `<p class="bench-warn">⚠ This book moves with the index, so it will return roughly what the index returns minus costs. Beating the market requires holding things that behave differently from it.</p>`
+    : "";
+  el.innerHTML =
+    `<div class="bench-corr-head">Correlation to ${corr.symbol || "SPY"}: ` +
+    `<b class="${cls}">${c.toFixed(2)}</b> <span class="muted">(${verdict})</span></div>` +
+    `<div class="muted small">${names}</div>${warn}`;
 }
 
 function renderAudit(audit) {
