@@ -231,6 +231,37 @@ Extra settings for this mode: `CYCLE_MINUTES` (default 30) and
 
 ---
 
+## How it tries to find an edge
+
+A $1,000 book has one genuine structural advantage: it can hold things too small
+or too specialised for large funds to bother with, where mispricings survive
+because nobody is arbitraging them away. Thousands of analysts cover AAPL; the
+chance of finding something they missed is close to zero, and the mega-caps *are*
+the index's largest weights, so owning them is buying the benchmark at a higher
+cost.
+
+So the watchlist is built around a **niche block** — thematic and single-sector
+funds (miners, uranium, solar, biotech, defence, single-country) each driven by
+one identifiable story rather than by the broad market. Those are deliberately
+volatile, which cuts both ways: bigger gains *and* bigger losses. Volatility-adjusted
+sizing is what makes that survivable — the book takes **more** niche positions at
+**smaller** size instead of betting itself on one theme.
+
+Set against that, four checks the AI cannot talk its way past:
+
+| | |
+|---|---|
+| **Benchmark** | Return vs buy-and-hold in SPY, after AI cost. Profit below the index is failure. |
+| **Correlation** | If the book moves with the index it cannot beat it, whatever the research says. |
+| **Track record** | Closed positions graded against the plan they were opened with. |
+| **Regime** | Trend and volatility stress, setting how aggressively to act. |
+
+None of this makes beating the market likely — most professional funds fail that
+bar. It makes it *possible*, and it makes failure *visible* rather than hidden
+behind a green number in a rising market.
+
+---
+
 ## Tuning the bot
 
 All optional — set these as repo **Variables** (not secrets). Defaults are in
@@ -250,6 +281,11 @@ All optional — set these as repo **Variables** (not secrets). Defaults are in
 | `ENABLE_FUNDAMENTALS` | `true` | Cached (~daily) AI "value scout" that flags names trading below their fundamentals as buy candidates |
 | `STOP_LOSS_REVIEW_PCT` | `8` | Positions down more than this % are flagged to the AI to decide cut-vs-hold with reasoning |
 | `STOP_LOSS_HARD_PCT` | `0` | Dumb safety backstop: force-close a position down more than this % regardless of the AI (`0` = off) |
+| `ENABLE_SCORECARD` | `true` | Grade every closed position against the target/stop it was opened with, and feed the aggregate record back into the prompt. The bot has no memory between cycles, so this is the only way it can see whether its process has worked. Full history in `docs/data/closed.jsonl`. |
+| `ENABLE_VOL_SIZING` | `true` | Size to equal **risk** rather than equal dollars, and tighten the per-symbol allocation cap for volatile names. Only ever tightens a cap, never widens one. |
+| `ENABLE_REGIME` | `true` | Read trend (benchmark vs its 200-day average) and stress (volatility as a percentile of its own past year) and adjust posture accordingly. |
+| `ENFORCE_EXITS` | `true` | Honour each position's recorded target and stop in plain Python, every cycle — including cycles the triage gate would otherwise skip. |
+| `DAILY_DEEP_CYCLE` | `true` | First cycle of each trading day always runs full research, bypassing triage. Overnight news has landed and positions have gapped, so this is the worst cycle to skip. |
 | `ENABLE_BENCHMARK` | `true` | Measure the book against buy-and-hold in the benchmark each cycle and tell the AI the result. Turning this off removes the only check on whether it is beating the index. |
 | `BENCHMARK_SYMBOL` | `SPY` | What to measure against. Must be a symbol the data API covers; keeping it on the watchlist avoids an extra request. |
 | `RISK_LEVEL` | `medium`* | Preset for the guardrails: `low` / `medium` / `semi-high` / `high`. Higher = **more aggressive** (more fully invested, more positions, more trades per cycle) — *not* more concentrated: the per-symbol cap stays modest (15–22%) at every level so the book stays a diversified set of medium/small positions. The specific vars below override it. (*The GitHub Actions workflow defaults this to `high`.) |

@@ -11,7 +11,7 @@ import json
 import os
 from datetime import datetime, timezone
 
-from . import benchmark
+from . import benchmark, regime, scorecard, sizing
 from .alpaca import Alpaca, AlpacaError
 from .auditor import Auditor
 from .brain import Brain
@@ -80,6 +80,9 @@ class Engine:
         self._bars: dict[str, list[dict]] = {}
         self._benchmark: dict | None = None   # bot vs. index return this period
         self._correlation: dict | None = None  # how index-like the book is
+        self._regime: dict | None = None       # trend/stress read on the benchmark
+        self._vols: dict[str, float] = {}      # annualised vol per watchlist name
+        self._scorecard: dict | None = None    # record over closed positions
 
     # ---- capital cap -----------------------------------------------------
     def effective_funds(self, account: dict, positions: list[dict]) -> tuple[float, float, float]:
@@ -148,11 +151,22 @@ class Engine:
         # Market data for the watchlist (best-effort; data API may be limited on
         # a brand-new account, so never let it abort the run).
         symbols = self.cfg.watchlist
+        # 60 days covers the correlation window and the 20-day volatility with
+        # headroom. The regime read needs far more (a 200-day average and a
+        # year of volatility to rank against), so the benchmark is fetched
+        # separately rather than pulling 300 bars for all 39 names.
+        #
+        # Fetch for held symbols as well as the watchlist: a name can be held
+        # after being dropped from the watchlist, and without its bars it would
+        # be silently excluded from the correlation and sizing reads - understating
+        # exactly the exposure that is hardest to notice.
+        bar_symbols = list(dict.fromkeys(symbols + [p["symbol"] for p in positions]))
         try:
-            bars = self.alpaca.daily_bars(symbols, limit=20)
+            bars = self.alpaca.daily_bars(bar_symbols, limit=60)
         except AlpacaError:
             bars = {}
         self._bars = bars
+        self._vols = sizing.vols(bars, bar_symbols)
         try:
             news = self.alpaca.news(symbols, limit=15)
         except AlpacaError:
@@ -168,6 +182,14 @@ class Engine:
                 lines.append(f"  {sym}: last ${last:,.2f} ({chg_s})")
             else:
                 lines.append(f"  {sym}: (no recent data)")
+
+        # Volatility-adjusted sizing guidance, so "equal weight" means equal
+        # risk rather than equal dollars.
+        if self.cfg.enable_vol_sizing and cap is not None:
+            vsum = sizing.summarize(bars, symbols, cap, self.cfg.target_positions,
+                                    held={p["symbol"] for p in positions})
+            if vsum:
+                lines.append(vsum)
 
         if news:
             lines += ["", "RECENT HEADLINES:"]
@@ -212,12 +234,26 @@ class Engine:
         if jrn:
             lines.append(jrn)
 
+        # The bot's own record. It has no memory between cycles, so this is the
+        # only way it can see whether its process has actually been working.
+        if self.cfg.enable_scorecard:
+            self._scorecard = scorecard.stats()
+            ssum = scorecard.summarize(self._scorecard)
+            if ssum:
+                lines.append(ssum)
+
         # Benchmark reality check, last so it is the freshest thing in mind
         # when the model decides: am I actually beating the index, and is this
         # book different enough from it to have a chance?
         bsum = self._benchmark_block(account, positions, bars)
         if bsum:
             lines.append(bsum)
+
+        # What kind of market this is, and the posture that argues for.
+        if self.cfg.enable_regime:
+            rsum = regime.summarize(self._regime_read())
+            if rsum:
+                lines.append(rsum)
 
         return "\n".join(lines), account, positions
 
@@ -232,6 +268,16 @@ class Engine:
             return closes[-1] if closes else None
         except AlpacaError:
             return None
+
+    def _regime_read(self) -> dict | None:
+        """Trend/stress on the benchmark, from its own long price history."""
+        sym = self.cfg.benchmark_symbol
+        try:
+            bars = self.alpaca.daily_bars([sym], limit=300).get(sym) or []
+        except AlpacaError:
+            return None
+        self._regime = regime.detect(bars, sym)
+        return self._regime
 
     def _benchmark_block(self, account: dict, positions: list[dict],
                          bars: dict[str, list[dict]]) -> str:
@@ -266,7 +312,19 @@ class Engine:
         equity, cash, _invested = self.effective_funds(account, positions)
         pos_by_sym = {p["symbol"]: p for p in positions}
         cash_floor = equity * (self.cfg.min_cash_reserve_pct / 100.0)
-        max_alloc = equity * (self.cfg.max_allocation_pct_per_symbol / 100.0)
+        base_alloc_pct = self.cfg.max_allocation_pct_per_symbol
+
+        def alloc_cap(symbol: str) -> float:
+            """Per-symbol dollar cap, tightened for volatile names.
+
+            Only ever tightens - the configured cap stays a hard ceiling, so a
+            quiet name can never justify a larger position than risk settings
+            allow.
+            """
+            if not self.cfg.enable_vol_sizing:
+                return equity * (base_alloc_pct / 100.0)
+            pct = sizing.allocation_cap_pct(base_alloc_pct, self._vols.get(symbol))
+            return equity * (pct / 100.0)
 
         # Running state, updated as each order is APPROVED within this run, so
         # multiple orders in the same cycle can't collectively breach a limit.
@@ -325,10 +383,11 @@ class Engine:
 
             if side == "buy":
                 held = exposure.get(symbol, 0.0)
+                max_alloc = alloc_cap(symbol)
                 if held + notional > max_alloc:
                     room = max(0.0, max_alloc - held)
                     if room < 1:
-                        reject(f"{symbol} already at {self.cfg.max_allocation_pct_per_symbol:.0f}% cap")
+                        reject(f"{symbol} already at its {max_alloc / equity * 100:.0f}% cap")
                         continue
                     notional = round(room, 2)
                     o["notional_usd"] = notional
@@ -356,8 +415,10 @@ class Engine:
                 if not self.cfg.allow_short:
                     reject("sell but no position held (shorting disabled)")
                     continue
-                # Short: apply the same per-symbol allocation cap to short size.
+                # Short: apply the same per-symbol allocation cap to short size,
+                # volatility-tightened exactly as a long position would be.
                 held = exposure.get(symbol, 0.0)
+                max_alloc = alloc_cap(symbol)
                 if held + notional > max_alloc:
                     room = max(0.0, max_alloc - held)
                     if room < 1:
@@ -507,6 +568,9 @@ class Engine:
             "skipped": skipped,
             "benchmark": self._benchmark,
             "correlation": self._correlation,
+            "regime": self._regime,
+            "scorecard": self._scorecard,
+            "volatility": self._vols,
             "fundamentals": self._last_scan,
             "theses": self._theses,
         }
@@ -571,6 +635,56 @@ class Engine:
                 })
         return forced
 
+    def _thesis_exit_orders(self, positions: list[dict], theses: dict) -> list[dict]:
+        """Honour the target and stop the bot itself set when it bought.
+
+        Every buy records a target and a stop, but nothing enforced them: the AI
+        had to notice on its next cycle, and triage could skip that cycle
+        entirely. A winner could round-trip past its target back to flat while
+        the bot slept. These fire in plain Python every cycle, skip cycles
+        included, so a plan the bot made is a plan it keeps.
+        """
+        if not self.cfg.enforce_exits:
+            return []
+        out = []
+        for p in positions:
+            sym = p["symbol"]
+            t = theses.get(sym)
+            price = _f(p.get("current_price"))
+            if not t or price <= 0:
+                continue
+            target, stop = _f(t.get("target_price")), _f(t.get("stop_price"))
+            hit = target > 0 and price >= target
+            broke = stop > 0 and price <= stop
+            if not (hit or broke):
+                continue
+            why = (f"target ${target:,.2f} reached" if hit
+                   else f"stop ${stop:,.2f} breached")
+            out.append({
+                "symbol": sym, "side": "sell",
+                "notional_usd": round(abs(_f(p.get("market_value"))), 2),
+                "qty": abs(_f(p.get("qty"))),
+                "reasoning": f"Automatic exit: {why} (price ${price:,.2f}). "
+                             f"Original thesis: {t.get('thesis', '')}",
+                "confidence": 1.0, "status": "approved",
+                "detail": f"auto-exit: {why}", "forced": True,
+                "thesis": t.get("thesis", ""), "conviction": t.get("conviction"),
+            })
+        return out
+
+    def _settle_closures(self, theses: dict, positions_before: list[dict],
+                         held_now: set[str]) -> list[dict]:
+        """Grade any thesis whose position is gone, then drop it.
+
+        Exit prices come from the pre-trade snapshot: once Alpaca stops
+        reporting a position there is no price left to read, so the last price
+        seen before the close is the only honest estimate available.
+        """
+        if not self.cfg.enable_scorecard:
+            return []
+        prices = {p["symbol"]: _f(p.get("current_price")) for p in positions_before}
+        return scorecard.record_closures(theses, held_now, prices)
+
     def _update_ledger(self, account: dict, cost: float) -> dict:
         """Add this cycle's AI cost, stamping the baseline on the first run.
 
@@ -610,7 +724,9 @@ class Engine:
         return state
 
     # ---- top-level run ---------------------------------------------------
-    def run(self, force: bool = False) -> dict:
+    def run(self, force: bool = False, deep: bool = False) -> dict:
+        """One cycle. `force` also trades outside market hours; `deep` only
+        bypasses the cheap triage gate, without loosening any other guard."""
         self.cfg.validate()
         try:
             clock = self.alpaca.clock()
@@ -622,8 +738,14 @@ class Engine:
         print(f"[engine] equity=${_f(account.get('equity')):,.2f} "
               f"positions={len(positions)} market_open={market_open}")
 
-        # Hard stop-loss backstop (if enabled): compute forced closes up front.
+        # Forced closes computed up front: the dumb hard stop-loss backstop,
+        # plus the targets and stops the bot set for itself. Both are mechanical
+        # and audit-exempt - the AI already justified them when it bought.
+        theses_now = self._theses or load_theses()
         forced = self._hard_stop_orders(positions)
+        exits = self._thesis_exit_orders(positions, theses_now)
+        forced_syms = {o["symbol"] for o in forced}
+        forced += [o for o in exits if o["symbol"] not in forced_syms]
         if forced:
             print(f"[engine] hard stop-loss triggered for "
                   f"{', '.join(o['symbol'] for o in forced)}")
@@ -631,7 +753,11 @@ class Engine:
         # Cheap triage gate: skip the expensive full pipeline on quiet cycles.
         # Bypassed for dry-run/force, and never skipped when a hard stop fired.
         triage_cost = 0.0
-        if self.cfg.triage_enabled and not self.cfg.dry_run and not force and not forced:
+        # A skipped cycle still honours mechanical exits: `forced` being
+        # non-empty bypasses triage entirely, so a target hit during a quiet
+        # stretch is acted on rather than waiting for an expensive cycle.
+        if (self.cfg.triage_enabled and not self.cfg.dry_run
+                and not force and not deep and not forced):
             run_full, reason = self.triage.should_run(context)
             triage_cost = self.triage.last_cost
             print(f"[engine] triage: run_full={run_full} (${triage_cost:.4f}) - {reason}")
@@ -665,6 +791,10 @@ class Engine:
             print(f"  - {o['side']} {o['symbol']} ${o['notional_usd']:,.0f} "
                   f"-> {o['status']} {('(' + o['detail'] + ')') if o['detail'] else ''}")
 
+        # Snapshot prices BEFORE the refresh: a position that closes this cycle
+        # vanishes from Alpaca, taking its last price with it.
+        positions_before = positions
+
         # If we placed anything, refresh so the dashboard shows post-trade
         # balances and the new positions immediately (not one cycle late).
         if any(o["status"] == "executed" for o in checked):
@@ -682,7 +812,15 @@ class Engine:
         for o in checked:
             if o["status"] == "executed" and o["side"] == "buy":
                 record_entry(theses, o, fill_price=price_by_sym.get(o["symbol"]))
-        theses = prune(theses, {p["symbol"] for p in positions})
+        # Grade whatever closed against the plan it was opened with, before the
+        # thesis is discarded - otherwise the evidence is lost with it.
+        held_now = {p["symbol"] for p in positions}
+        closed = self._settle_closures(theses, positions_before, held_now)
+        if closed:
+            for c in closed:
+                r = f"{c['return_pct']:+.1f}%" if c.get("return_pct") is not None else "n/a"
+                print(f"[engine] closed {c['symbol']}: {r} ({c['outcome']})")
+        theses = prune(theses, held_now)
         save_theses(theses)
         self._theses = theses
 

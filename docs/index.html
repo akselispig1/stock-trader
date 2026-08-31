@@ -70,6 +70,32 @@
       <div id="bench-corr" class="bench-corr"></div>
     </section>
 
+    <!-- Market regime: what kind of market this is -->
+    <section class="card" id="regime-card" style="display:none">
+      <div class="card-head">
+        <h2>Market regime</h2>
+        <span class="pill" id="regime-pill">—</span>
+      </div>
+      <p id="regime-detail" class="muted"></p>
+      <p id="regime-posture"></p>
+    </section>
+
+    <!-- Its own graded record -->
+    <section class="card" id="record-card" style="display:none">
+      <div class="card-head">
+        <h2>Track record</h2>
+        <span class="muted small" id="record-count"></span>
+      </div>
+      <div id="record-warn"></div>
+      <div class="table-wrap">
+        <table class="tbl" id="record-table">
+          <thead><tr><th>Conviction</th><th>Closed</th><th>Winners</th><th>Avg return</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <p class="muted small" id="record-exits"></p>
+    </section>
+
     <!-- Equity curve -->
     <section class="card">
       <div class="card-head">
