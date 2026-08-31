@@ -11,6 +11,7 @@ import json
 import os
 from datetime import datetime, timezone
 
+from . import benchmark
 from .alpaca import Alpaca, AlpacaError
 from .auditor import Auditor
 from .brain import Brain
@@ -76,6 +77,9 @@ class Engine:
         self._scout_cost = 0.0  # fundamentals scan cost incurred this cycle (0 if cached)
         self._last_scan: dict | None = None
         self._theses: dict = {}
+        self._bars: dict[str, list[dict]] = {}
+        self._benchmark: dict | None = None   # bot vs. index return this period
+        self._correlation: dict | None = None  # how index-like the book is
 
     # ---- capital cap -----------------------------------------------------
     def effective_funds(self, account: dict, positions: list[dict]) -> tuple[float, float, float]:
@@ -148,6 +152,7 @@ class Engine:
             bars = self.alpaca.daily_bars(symbols, limit=20)
         except AlpacaError:
             bars = {}
+        self._bars = bars
         try:
             news = self.alpaca.news(symbols, limit=15)
         except AlpacaError:
@@ -207,7 +212,48 @@ class Engine:
         if jrn:
             lines.append(jrn)
 
+        # Benchmark reality check, last so it is the freshest thing in mind
+        # when the model decides: am I actually beating the index, and is this
+        # book different enough from it to have a chance?
+        bsum = self._benchmark_block(account, positions, bars)
+        if bsum:
+            lines.append(bsum)
+
         return "\n".join(lines), account, positions
+
+    def _benchmark_price(self, bars: dict[str, list[dict]]) -> float | None:
+        """Latest benchmark close, reusing watchlist bars when they cover it."""
+        sym = self.cfg.benchmark_symbol
+        closes = benchmark._closes(bars.get(sym) or [])
+        if closes:
+            return closes[-1]
+        try:  # benchmark isn't on the watchlist - fetch it on its own
+            closes = benchmark._closes(self.alpaca.daily_bars([sym], limit=2).get(sym) or [])
+            return closes[-1] if closes else None
+        except AlpacaError:
+            return None
+
+    def _benchmark_block(self, account: dict, positions: list[dict],
+                         bars: dict[str, list[dict]]) -> str:
+        """Compute alpha + book correlation and render them for the AI."""
+        if not self.cfg.enable_benchmark:
+            return ""
+        sym = self.cfg.benchmark_symbol
+        price = self._benchmark_price(bars)
+        ledger = _load_ledger()
+
+        # A ledger created before benchmarking existed has no starting price.
+        # Attach one now so the comparison can begin, flagged as partial.
+        if ledger.get("baseline_equity") and benchmark.backfill_baseline_price(
+                ledger, price, sym):
+            _save_ledger(ledger)
+
+        equity = _f(account.get("equity"))
+        net_pnl = (equity - _f(ledger.get("baseline_equity"))
+                   - _f(ledger.get("cumulative_ai_cost")))
+        self._benchmark = benchmark.compute(ledger, equity, net_pnl, price)
+        self._correlation = benchmark.book_correlation(bars, positions, sym)
+        return benchmark.summarize(self._benchmark, self._correlation)
 
     # ---- risk checks -----------------------------------------------------
     def risk_check(
@@ -456,6 +502,8 @@ class Engine:
             "orders": checked,
             "audit": audit,
             "skipped": skipped,
+            "benchmark": self._benchmark,
+            "correlation": self._correlation,
             "fundamentals": self._last_scan,
             "theses": self._theses,
         }
@@ -520,16 +568,31 @@ class Engine:
                 })
         return forced
 
+    def _update_ledger(self, account: dict, cost: float) -> dict:
+        """Add this cycle's AI cost, stamping the baseline on the first run.
+
+        The equity baseline and the benchmark's starting price must be captured
+        in the same moment: a benchmark baseline taken later would measure the
+        index over a shorter window than the book, quietly biasing alpha.
+        """
+        ledger = _load_ledger()
+        if ledger.get("baseline_equity") in (None, 0):
+            benchmark.record_baseline(
+                ledger,
+                equity=_f(account.get("equity")),
+                bench_price=self._benchmark_price(self._bars),
+                symbol=self.cfg.benchmark_symbol,
+            )
+        ledger["cumulative_ai_cost"] = _f(ledger.get("cumulative_ai_cost")) + cost
+        _save_ledger(ledger)
+        return ledger
+
     def _record_skip(self, account: dict, positions: list[dict], reason: str,
                      triage_cost: float) -> dict:
         """Triage decided this cycle isn't worth a full run: log a cheap, honest
         skip (still refreshing P&L and cost) and return."""
         skip_cost = triage_cost + self._scout_cost  # a stale fundamentals refresh still costs
-        ledger = _load_ledger()
-        if ledger.get("baseline_equity") in (None, 0):
-            ledger["baseline_equity"] = _f(account.get("equity"))
-        ledger["cumulative_ai_cost"] = _f(ledger.get("cumulative_ai_cost")) + skip_cost
-        _save_ledger(ledger)
+        ledger = self._update_ledger(account, skip_cost)
         print(f"[engine] skipped full cycle (cost ${skip_cost:.4f}); "
               f"total=${_f(ledger['cumulative_ai_cost']):.2f}")
         plan = {
@@ -623,11 +686,7 @@ class Engine:
         # AI operating cost for this cycle, and the running P&L-vs-cost ledger.
         cycle_cost = (triage_cost + self._scout_cost
                       + self.brain.run_cost + self.auditor.last_cost)
-        ledger = _load_ledger()
-        if ledger.get("baseline_equity") in (None, 0):
-            ledger["baseline_equity"] = _f(account.get("equity"))
-        ledger["cumulative_ai_cost"] = _f(ledger.get("cumulative_ai_cost")) + cycle_cost
-        _save_ledger(ledger)
+        ledger = self._update_ledger(account, cycle_cost)
         print(f"[engine] AI cost this cycle=${cycle_cost:.4f} "
               f"total=${_f(ledger['cumulative_ai_cost']):.2f}")
 

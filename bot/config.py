@@ -123,19 +123,37 @@ class Config:
     closed_poll_minutes: float = field(default_factory=lambda: _float("CLOSED_POLL_MINUTES", 30.0))
 
     # --- Universe ---
-    # Diversified across sectors + ETFs so the bot isn't trapped in correlated
-    # mega-cap AI: tech, financials, healthcare, energy, staples, plus broad and
-    # sector/asset ETFs. Override with the WATCHLIST env/var.
+    # Grouped by the ROLE each name plays, because beating the index needs
+    # instruments that do not move with it. Mega-cap tech and broad ETFs are the
+    # index's own largest weights - holding several is one bet, not a book - so
+    # they are kept available but deliberately outnumbered here by defensives,
+    # bonds, commodities, international and value names whose outcomes turn on a
+    # specific thesis rather than the market's direction. Override with WATCHLIST.
     watchlist: list[str] = field(
         default_factory=lambda: _list(
             "WATCHLIST",
             [
-                # mega-cap tech
+                # Mega-cap tech - these ARE the index's top weights. Available,
+                # but the prompt warns against treating them as diversification.
                 "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA",
-                # financials / healthcare / energy / staples / industrial
+                # Other large caps across sectors
                 "JPM", "V", "UNH", "JNJ", "XOM", "WMT", "COST", "CAT",
-                # ETFs: broad, small-cap, gold, energy, financials
-                "SPY", "QQQ", "IWM", "GLD", "XLE", "XLF",
+                # Defensive individual names - earnings-driven, low beta
+                "KO", "PG", "PEP", "MRK", "PFE", "VZ", "MCD",
+                # Defensive / rate-sensitive sectors
+                "XLU", "XLP", "XLV", "XLRE",
+                # Bonds - the main genuinely anti-correlated exposure available
+                "TLT", "IEF",
+                # Commodities - driven by supply/demand, not equity sentiment
+                "GLD", "SLV", "DBC",
+                # International - different economies and currencies
+                "EFA", "EEM",
+                # Factor tilts away from the cap-weighted index
+                "VTV", "IWM",
+                # Broad index ETFs. Deliberately last: buying these spends the
+                # budget on guaranteed zero alpha. Useful only as a parking
+                # place for cash with no better idea.
+                "SPY", "QQQ", "XLE", "XLF",
             ],
         )
     )
@@ -146,6 +164,17 @@ class Config:
     # buy candidates and price-already-reflects-it names to skip.
     enable_fundamentals: bool = field(default_factory=lambda: _bool("ENABLE_FUNDAMENTALS", True))
     fundamentals_ttl_hours: float = field(default_factory=lambda: _float("FUNDAMENTALS_TTL_HOURS", 20.0))
+
+    # --- Benchmark ---
+    # The bot measures itself against buy-and-hold in this symbol and is told
+    # the result each cycle. Absolute P&L flatters any long book in a rising
+    # market; alpha (excess return over the index, after AI cost) is the only
+    # figure that says whether the AI is adding anything. Also drives the
+    # correlation check that catches a book which has quietly become the index.
+    enable_benchmark: bool = field(default_factory=lambda: _bool("ENABLE_BENCHMARK", True))
+    benchmark_symbol: str = field(
+        default_factory=lambda: os.getenv("BENCHMARK_SYMBOL", "SPY").strip().upper() or "SPY"
+    )
 
     # --- Stop-loss (AI-reviewed) ---
     # A position down more than STOP_LOSS_REVIEW_PCT is flagged to the trader AI
@@ -218,6 +247,8 @@ class Config:
             "triage_enabled": self.triage_enabled,
             "triage_model": self.triage_model,
             "enable_fundamentals": self.enable_fundamentals,
+            "enable_benchmark": self.enable_benchmark,
+            "benchmark_symbol": self.benchmark_symbol,
             "stop_loss_review_pct": self.stop_loss_review_pct,
             "stop_loss_hard_pct": self.stop_loss_hard_pct,
             "risk": {

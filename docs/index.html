@@ -43,7 +43,32 @@
     </section>
     <p id="pnl-line" class="pnl-line"></p>
 
-    <p id="pnl-line" class="pnl-line"></p>
+    <!-- The scoreboard that actually matters: did it beat buying the index? -->
+    <section class="card bench-card" id="bench-card" style="display:none">
+      <div class="card-head">
+        <h2>Versus the market</h2>
+        <span class="muted small" id="bench-period"></span>
+      </div>
+      <div class="bench-grid">
+        <div class="bench-cell">
+          <span class="bench-label">This bot</span>
+          <span class="bench-value" id="bench-bot">—</span>
+          <span class="muted small" id="bench-bot-note"></span>
+        </div>
+        <div class="bench-cell">
+          <span class="bench-label" id="bench-sym-label">Buy &amp; hold</span>
+          <span class="bench-value" id="bench-index">—</span>
+          <span class="muted small">doing nothing</span>
+        </div>
+        <div class="bench-cell bench-alpha">
+          <span class="bench-label">Alpha</span>
+          <span class="bench-value" id="bench-alpha">—</span>
+          <span class="muted small">after AI cost</span>
+        </div>
+      </div>
+      <p class="bench-plain" id="bench-plain"></p>
+      <div id="bench-corr" class="bench-corr"></div>
+    </section>
 
     <!-- Equity curve -->
     <section class="card">

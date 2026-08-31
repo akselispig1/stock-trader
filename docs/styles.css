@@ -291,3 +291,37 @@ main {
 .tab:hover { color: var(--text); }
 .tab.is-active { color: var(--accent); border-bottom-color: var(--accent); }
 .panel[hidden] { display: none; }
+
+/* ---------- Versus the market ---------- */
+/* The bot's whole justification lives here, so it is styled as the loudest
+   card on the page: three big figures, then the same claim in plain money. */
+.bench-card { border-left: 3px solid var(--accent); }
+.bench-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 12px; margin: 4px 0 14px;
+}
+.bench-cell {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 12px; background: var(--surface-2); border-radius: 10px;
+}
+.bench-cell.bench-alpha { background: var(--accent-weak); }
+.bench-label {
+  font-size: .72rem; text-transform: uppercase; letter-spacing: .04em;
+  color: var(--text-muted); font-weight: 600;
+}
+.bench-value { font-size: 1.5rem; font-weight: 700; font-family: var(--mono); }
+.bench-plain { margin: 0 0 12px; line-height: 1.55; }
+.bench-corr {
+  border-top: 1px solid var(--border); padding-top: 12px;
+}
+.bench-corr-head { margin-bottom: 4px; }
+.bench-warn {
+  margin: 10px 0 0; padding: 10px 12px; line-height: 1.5;
+  background: var(--neg-weak); color: var(--neg); border-radius: 10px;
+}
+.warn { color: var(--warn); }
+
+@media (max-width: 560px) {
+  .bench-grid { grid-template-columns: 1fr; }
+  .bench-value { font-size: 1.3rem; }
+}

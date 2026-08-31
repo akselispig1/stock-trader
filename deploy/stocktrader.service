@@ -1,0 +1,49 @@
+[Unit]
+Description=AI Stockbroker (trading loop + dashboard)
+Documentation=https://github.com/akselispig1/stock-trader
+# Wait for real connectivity, not just an interface. A laptop that starts
+# faster than its wifi associates would otherwise burn its first cycles on
+# connection errors.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# __USER__ / __DIR__ are substituted by deploy/install-linux.sh.
+User=__USER__
+WorkingDirectory=__DIR__
+ExecStart=__DIR__/.venv/bin/python -m bot.serve --port 8080
+
+# Restart on any exit, including a clean one: on an unattended box the only
+# acceptable state is "running". RestartSec gives a flapping network or a
+# rebooting router time to settle instead of spinning.
+Restart=always
+RestartSec=30
+# ...but if it fails 5 times in 10 minutes something is genuinely broken
+# (bad credentials, corrupt install) and restarting forever just hides it.
+StartLimitIntervalSec=600
+StartLimitBurst=5
+
+# SIGTERM lets the loop finish its cycle and write state.json; only kill it
+# if it is still going after two minutes.
+KillSignal=SIGTERM
+TimeoutStopSec=120
+
+# Logs go to the journal: `journalctl -u stocktrader -f` to follow.
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=stocktrader
+
+# Modest hardening. The service only needs to read its own directory and
+# write docs/data, so deny it everything else it might touch by accident.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=__DIR__/docs/data
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target
