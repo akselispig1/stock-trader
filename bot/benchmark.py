@@ -19,8 +19,12 @@ itself, and feeds both back into its own context each cycle:
 """
 from __future__ import annotations
 
-import math
 from datetime import datetime, timezone
+
+from .bars import closes as _closes
+from .bars import daily_returns as _returns
+from .bars import f as _f
+from .bars import pearson as _pearson
 
 # Correlation at or above this means the book is effectively an index tracker.
 INDEX_LIKE = 0.85
@@ -31,40 +35,9 @@ DIFFERENTIATED = 0.70
 MIN_PAIRED_DAYS = 8
 
 
-def _f(x, default=0.0) -> float:
-    try:
-        return float(x)
-    except (TypeError, ValueError):
-        return default
-
-
-def _closes(bars: list[dict]) -> list[float]:
-    return [c for c in (_f(b.get("c")) for b in bars or []) if c > 0]
-
-
-def _returns(bars: list[dict]) -> list[float]:
-    """Daily fractional returns from a bar series."""
-    cs = _closes(bars)
-    return [(cs[i] - cs[i - 1]) / cs[i - 1] for i in range(1, len(cs))]
-
-
 def pearson(xs: list[float], ys: list[float]) -> float | None:
-    """Correlation of two return series, aligned on their most recent days.
-
-    Returns None when there is too little data or either series is flat (a
-    zero-variance series has no defined correlation).
-    """
-    n = min(len(xs), len(ys))
-    if n < MIN_PAIRED_DAYS:
-        return None
-    xs, ys = xs[-n:], ys[-n:]
-    mx, my = sum(xs) / n, sum(ys) / n
-    num = sum((x - mx) * (y - my) for x, y in zip(xs, ys))
-    dx = math.sqrt(sum((x - mx) ** 2 for x in xs))
-    dy = math.sqrt(sum((y - my) ** 2 for y in ys))
-    if dx == 0 or dy == 0:
-        return None
-    return num / (dx * dy)
+    """Correlation of two return series. See bot.bars.pearson."""
+    return _pearson(xs, ys, min_pairs=MIN_PAIRED_DAYS)
 
 
 def record_baseline(ledger: dict, equity: float, bench_price: float | None,

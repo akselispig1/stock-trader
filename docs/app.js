@@ -53,6 +53,8 @@ async function loadState() {
   renderDecision(STATE);
   renderAudit(STATE.audit);
   renderBenchmark(STATE.benchmark, STATE.correlation);
+  renderRegime(STATE.regime);
+  renderRecord(STATE.scorecard);
   renderValueScan(STATE.fundamentals);
   renderTheses(STATE.theses, STATE.positions);
   renderPositions(STATE.positions, "from last bot run");
@@ -250,6 +252,66 @@ function renderBenchmark(b, corr) {
     `<div class="bench-corr-head">Correlation to ${corr.symbol || "SPY"}: ` +
     `<b class="${cls}">${c.toFixed(2)}</b> <span class="muted">(${verdict})</span></div>` +
     `<div class="muted small">${names}</div>${warn}`;
+}
+
+/* What kind of market this is - the bot changes posture on it. */
+function renderRegime(r) {
+  const card = $("regime-card");
+  if (!card) return;
+  if (!r) { card.style.display = "none"; return; }
+  card.style.display = "";
+  const stressed = r.stress === "stressed";
+  const pill = $("regime-pill");
+  pill.textContent = (r.label || "").replace("/", " · ");
+  pill.className = "pill " + (stressed ? "audit-reject"
+                    : r.risk_on ? "audit-approve" : "audit-flag");
+  const vol = r.vol_pct != null
+    ? `, volatility ${Number(r.vol_pct).toFixed(0)}%/yr` +
+      (r.vol_percentile != null ? ` (${Number(r.vol_percentile).toFixed(0)}th pct of the year)` : "")
+    : "";
+  const d = Number(r.distance_pct) || 0;
+  $("regime-detail").textContent =
+    `${r.symbol} is ${Math.abs(d).toFixed(1)}% ${d >= 0 ? "above" : "below"} its ` +
+    `${r.sma_window}-day average${vol}.`;
+  $("regime-posture").textContent = stressed
+    ? "Protecting capital: holding more cash and sizing new positions small."
+    : r.risk_on ? "Favourable backdrop — willing to deploy into good ideas."
+                : "Cautious — more demanding of any new position.";
+}
+
+/* The bot's own graded record. It has no memory, so this is how it sees itself. */
+function renderRecord(s) {
+  const card = $("record-card");
+  if (!card) return;
+  if (!s || !s.total) { card.style.display = "none"; return; }
+  card.style.display = "";
+
+  const o = s.overall || {};
+  $("record-count").textContent = o.scored
+    ? `${s.total} closed · ${Number(o.win_rate).toFixed(0)}% winners · ` +
+      `average ${pct(o.avg_return_pct)}`
+    : `${s.total} closed`;
+
+  $("record-warn").innerHTML = s.enough_data
+    ? ""
+    : `<p class="bench-warn" style="background:var(--surface-2);color:var(--text-muted)">` +
+      `Only ${s.total} closed position${s.total === 1 ? "" : "s"} so far — far too few to ` +
+      `judge whether the strategy works. Treat these numbers as noise until there are more.</p>`;
+
+  const rows = Object.entries(s.by_conviction || {})
+    .filter(([, v]) => v.scored)
+    .map(([k, v]) => `<tr><td>${k}</td><td>${v.scored}</td>` +
+      `<td>${Number(v.win_rate).toFixed(0)}%</td>` +
+      `<td class="${v.avg_return_pct >= 0 ? "pos" : "neg"}">${pct(v.avg_return_pct)}</td></tr>`)
+    .join("");
+  $("record-table").querySelector("tbody").innerHTML =
+    rows || `<tr><td colspan="4" class="muted">No priced closures yet.</td></tr>`;
+
+  const outs = Object.entries(s.outcomes || {})
+    .sort((a, b) => b[1] - a[1])
+    .map(([k, v]) => `${v} ${k.replace(/_/g, " ")}`)
+    .join(" · ");
+  $("record-exits").textContent = outs ? `Exits: ${outs}` : "";
 }
 
 function renderAudit(audit) {

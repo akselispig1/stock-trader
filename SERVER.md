@@ -136,6 +136,11 @@ The **Versus the market** card on the dashboard. Net alpha is the only number
 that says whether any of this beat leaving the money in an index fund. Absolute
 profit in a rising market means very little.
 
+Then the **Track record** card, once a handful of positions have closed. The
+number to watch is whether high-conviction positions actually outperform the
+small ones — if they don't, the bot's confidence carries no information, and it
+says so itself in that card.
+
 ---
 
 ## When it goes wrong

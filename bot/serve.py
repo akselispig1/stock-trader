@@ -53,6 +53,7 @@ STATUS: dict = {
     "last_error_at": None,
     "next_check_in_s": None,
     "market_open": None,
+    "last_deep_cycle": None,
 }
 
 
@@ -125,8 +126,17 @@ def trading_loop(cfg: Config) -> None:
             log(f"could not reach Alpaca ({e}) - will retry")
 
         if market_open:
+            # First cycle of each trading day runs deep: it bypasses the cheap
+            # triage gate and always does full research. Overnight news has
+            # landed and positions have gapped, so this is exactly the cycle
+            # where skipping to save $0.15 is most expensive.
+            today = datetime.now(timezone.utc).date().isoformat()
+            deep = bool(cfg.daily_deep_cycle) and STATUS["last_deep_cycle"] != today
             try:
-                state = engine.run()
+                if deep:
+                    log(f"first cycle of {today} - running deep (no triage skip)")
+                    STATUS["last_deep_cycle"] = today
+                state = engine.run(deep=deep)
                 STATUS["cycles"] += 1
                 STATUS["last_run"] = datetime.now(timezone.utc).isoformat()
                 STATUS["last_result"] = (state.get("market_summary") or "")[:200]

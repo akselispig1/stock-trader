@@ -62,11 +62,15 @@ def _list(name: str, default: list[str]) -> list[str]:
 # every level so the book stays a diversified set of medium/small positions
 # rather than a few huge bets. Raise MAX_ALLOCATION_PCT_PER_SYMBOL explicitly if
 # you ever want a concentrated book.
+# Every level keeps an OPPORTUNITY RESERVE. A 0% reserve is not "maximum
+# aggression" - it is paralysis: the book previously deployed to 92% with $84
+# left, after which every good idea was unactionable for days because there was
+# nothing to buy it with. Cash is a position, and the option to act has value.
 RISK_PRESETS: dict[str, dict[str, float]] = {
     "low":       {"alloc": 15.0, "reserve": 20.0, "orders": 3, "positions": 6},
-    "medium":    {"alloc": 18.0, "reserve": 10.0, "orders": 4, "positions": 8},
-    "semi-high": {"alloc": 20.0, "reserve": 5.0,  "orders": 5, "positions": 10},
-    "high":      {"alloc": 22.0, "reserve": 0.0,  "orders": 6, "positions": 12},
+    "medium":    {"alloc": 18.0, "reserve": 15.0, "orders": 4, "positions": 8},
+    "semi-high": {"alloc": 20.0, "reserve": 12.0, "orders": 5, "positions": 10},
+    "high":      {"alloc": 22.0, "reserve": 10.0, "orders": 6, "positions": 12},
 }
 
 
@@ -123,37 +127,59 @@ class Config:
     closed_poll_minutes: float = field(default_factory=lambda: _float("CLOSED_POLL_MINUTES", 30.0))
 
     # --- Universe ---
-    # Grouped by the ROLE each name plays, because beating the index needs
-    # instruments that do not move with it. Mega-cap tech and broad ETFs are the
-    # index's own largest weights - holding several is one bet, not a book - so
-    # they are kept available but deliberately outnumbered here by defensives,
-    # bonds, commodities, international and value names whose outcomes turn on a
-    # specific thesis rather than the market's direction. Override with WATCHLIST.
+    # Grouped by the ROLE each name plays.
+    #
+    # The single biggest constraint on a small book's edge is WHERE it looks.
+    # Mega-caps are the most heavily researched securities in existence - the
+    # chance of finding a mispricing in AAPL that thousands of analysts have
+    # missed is close to zero, and they ARE the index's largest weights, so
+    # owning them is buying the benchmark at a higher fee.
+    #
+    # A $1,000 book has exactly one structural advantage: it can hold things too
+    # small or too specialised for large funds to touch, where mispricings
+    # actually survive. The NICHE block below is that advantage - thematic and
+    # single-sector ETFs driven by one identifiable story (a commodity cycle, a
+    # policy change, a capex boom) rather than by the broad market.
+    #
+    # These are deliberately volatile. That is the point AND the risk: they can
+    # move 30-50% on a theme. Volatility-adjusted sizing (bot/sizing.py) sizes
+    # them down automatically, so the book takes MORE niche positions at SMALLER
+    # size rather than betting itself on one story. Dispersion is the source of
+    # the opportunity; position sizing is what keeps it survivable.
     watchlist: list[str] = field(
         default_factory=lambda: _list(
             "WATCHLIST",
             [
-                # Mega-cap tech - these ARE the index's top weights. Available,
-                # but the prompt warns against treating them as diversification.
-                "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA",
-                # Other large caps across sectors
-                "JPM", "V", "UNH", "JNJ", "XOM", "WMT", "COST", "CAT",
-                # Defensive individual names - earnings-driven, low beta
+                # --- NICHE: one identifiable driver each, thinly followed ---
+                # Metals & mining - commodity cycles, high beta to the metal
+                "GDX", "SIL", "COPX", "XME", "URA", "REMX",
+                # Energy sub-sectors - capex and oil-services cycles
+                "OIH", "FCG",
+                # Policy / capex driven themes
+                "ITA", "TAN", "ICLN", "LIT", "NLR",
+                # Single-industry equity themes
+                "XBI", "KWEB", "JETS", "CIBR", "BOTZ", "MOO", "PPA",
+                # --- Defensive individual names - earnings-driven, low beta ---
                 "KO", "PG", "PEP", "MRK", "PFE", "VZ", "MCD",
-                # Defensive / rate-sensitive sectors
+                # --- Defensive / rate-sensitive sectors ---
                 "XLU", "XLP", "XLV", "XLRE",
-                # Bonds - the main genuinely anti-correlated exposure available
+                # --- Bonds: the main genuinely anti-correlated exposure ---
                 "TLT", "IEF",
-                # Commodities - driven by supply/demand, not equity sentiment
+                # --- Broad commodities & precious metals ---
                 "GLD", "SLV", "DBC",
-                # International - different economies and currencies
-                "EFA", "EEM",
-                # Factor tilts away from the cap-weighted index
-                "VTV", "IWM",
-                # Broad index ETFs. Deliberately last: buying these spends the
-                # budget on guaranteed zero alpha. Useful only as a parking
-                # place for cash with no better idea.
-                "SPY", "QQQ", "XLE", "XLF",
+                # --- International: different economies and currencies ---
+                "EFA", "EEM", "EWZ", "EWJ",
+                # --- Factor tilts away from the cap-weighted index ---
+                "VTV", "IWM", "MDY",
+                # --- Large caps across sectors (context, not edge) ---
+                "JPM", "UNH", "XOM", "CAT",
+                # --- Mega-cap tech. These ARE the index's top weights: owning
+                # several is one bet, not a book. Kept available for a specific
+                # thesis, never as diversification. ---
+                "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA",
+                # --- Broad index ETFs. Buying these spends budget on guaranteed
+                # zero alpha; useful only as a parking place for idle cash. ---
+                "SPY", "QQQ",
             ],
         )
     )
@@ -175,6 +201,31 @@ class Config:
     benchmark_symbol: str = field(
         default_factory=lambda: os.getenv("BENCHMARK_SYMBOL", "SPY").strip().upper() or "SPY"
     )
+
+    # --- Learning from its own record ---
+    # The bot has no memory between cycles, so the only way it can see whether
+    # its process works is to be shown the graded outcome of past positions.
+    enable_scorecard: bool = field(default_factory=lambda: _bool("ENABLE_SCORECARD", True))
+
+    # --- Volatility-adjusted sizing ---
+    # Size to equal RISK rather than equal dollars, and tighten the per-symbol
+    # allocation cap for volatile names. Never widens a cap.
+    enable_vol_sizing: bool = field(default_factory=lambda: _bool("ENABLE_VOL_SIZING", True))
+
+    # --- Market regime ---
+    # Trend and volatility-stress read off the benchmark, used to set posture.
+    enable_regime: bool = field(default_factory=lambda: _bool("ENABLE_REGIME", True))
+
+    # --- Mechanical exits ---
+    # Honour the target/stop recorded with each buy in plain Python, every
+    # cycle, so a plan the bot made is a plan it keeps even on a skipped cycle.
+    enforce_exits: bool = field(default_factory=lambda: _bool("ENFORCE_EXITS", True))
+
+    # --- Deep daily cycle ---
+    # The first cycle of each trading day bypasses the cheap triage gate and
+    # always runs full research: overnight news has landed and positions have
+    # gapped, which is exactly when a skip is most expensive.
+    daily_deep_cycle: bool = field(default_factory=lambda: _bool("DAILY_DEEP_CYCLE", True))
 
     # --- Stop-loss (AI-reviewed) ---
     # A position down more than STOP_LOSS_REVIEW_PCT is flagged to the trader AI
@@ -248,6 +299,11 @@ class Config:
             "triage_model": self.triage_model,
             "enable_fundamentals": self.enable_fundamentals,
             "enable_benchmark": self.enable_benchmark,
+            "enable_scorecard": self.enable_scorecard,
+            "enable_vol_sizing": self.enable_vol_sizing,
+            "enable_regime": self.enable_regime,
+            "enforce_exits": self.enforce_exits,
+            "daily_deep_cycle": self.daily_deep_cycle,
             "benchmark_symbol": self.benchmark_symbol,
             "stop_loss_review_pct": self.stop_loss_review_pct,
             "stop_loss_hard_pct": self.stop_loss_hard_pct,
