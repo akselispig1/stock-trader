@@ -212,6 +212,40 @@ class Config:
     # allocation cap for volatile names. Never widens a cap.
     enable_vol_sizing: bool = field(default_factory=lambda: _bool("ENABLE_VOL_SIZING", True))
 
+    # --- Self-review (the bot rewrites its own playbook) ---
+    # Periodically the bot reads its own graded results and proposes changes to
+    # its trading playbook, including retiring rules it wrote earlier that the
+    # evidence has not supported.
+    #
+    # The playbook is TEXT INJECTED INTO A PROMPT. It cannot change risk limits,
+    # the auditor, or any code: enforcement lives in risk_check and reads Config,
+    # never the playbook. A bad rule can produce a bad proposal, which then meets
+    # exactly the same caps and the same independent auditor as any other.
+    #
+    # The thresholds exist because rules written on a handful of trades are
+    # superstition. Nothing is proposed below evolve_min_trades, and no further
+    # review runs until evolve_every_trades more positions have closed.
+    # Ships OFF. A feature that rewrites how the bot behaves should be switched
+    # on deliberately rather than inherited by anyone who pulls.
+    enable_evolution: bool = field(default_factory=lambda: _bool("ENABLE_EVOLUTION", False))
+    evolve_min_trades: int = field(default_factory=lambda: _int("EVOLVE_MIN_TRADES", 15))
+    evolve_every_trades: int = field(default_factory=lambda: _int("EVOLVE_EVERY_TRADES", 10))
+
+    # --- Self-modifying code (OFF, and not yet wired to anything) ---
+    # bot/selfmod.py and bot/engineer.py implement the bot rewriting its own
+    # source: a recurring failure is diagnosed, a patch is written, and it is
+    # proved against the full invariant suite inside a throwaway copy of the
+    # repository before it can reach the running system.
+    #
+    # NOTHING CALLS THEM YET. The modules are present and reviewable but inert,
+    # and this flag is off, because the guard tests in tests/test_selfmod.py
+    # have not been executed. Do not enable this until `python -m tests.run`
+    # passes on your machine.
+    enable_selfmod: bool = field(default_factory=lambda: _bool("ENABLE_SELFMOD", False))
+    # How many times one failure must recur before it counts as a defect worth
+    # patching rather than bad luck.
+    selfmod_min_incidents: int = field(default_factory=lambda: _int("SELFMOD_MIN_INCIDENTS", 8))
+
     # --- Risk projection ---
     # Turn the chosen RISK_LEVEL into what it actually implies: how much the
     # book will swing and how deep the drawdowns get. Risk only - the
@@ -310,6 +344,10 @@ class Config:
             "enable_vol_sizing": self.enable_vol_sizing,
             "enable_regime": self.enable_regime,
             "enable_projection": self.enable_projection,
+            "enable_evolution": self.enable_evolution,
+            "enable_selfmod": self.enable_selfmod,
+            "evolve_min_trades": self.evolve_min_trades,
+            "evolve_every_trades": self.evolve_every_trades,
             "enforce_exits": self.enforce_exits,
             "daily_deep_cycle": self.daily_deep_cycle,
             "benchmark_symbol": self.benchmark_symbol,
