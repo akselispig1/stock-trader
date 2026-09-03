@@ -11,7 +11,8 @@ import json
 import os
 from datetime import datetime, timezone
 
-from . import benchmark, projection, regime, scorecard, sizing
+from . import benchmark, playbook, projection, regime, scorecard, sizing
+from .evolve import Reviewer
 from .alpaca import Alpaca, AlpacaError
 from .auditor import Auditor
 from .brain import Brain
@@ -74,6 +75,7 @@ class Engine:
         self.auditor = Auditor(cfg)
         self.triage = Triage(cfg)
         self.scout = ValueScout(cfg)
+        self.reviewer = Reviewer(cfg)
         self._scout_cost = 0.0  # fundamentals scan cost incurred this cycle (0 if cached)
         self._last_scan: dict | None = None
         self._theses: dict = {}
@@ -85,6 +87,8 @@ class Engine:
         self._scorecard: dict | None = None    # record over closed positions
         self._projection: dict | None = None   # risk implied by the active preset
         self._proj_cache: tuple | None = None  # (vol, capital) the projection is for
+        self._playbook: dict = {}              # rules the bot wrote for itself
+        self._evolution: dict | None = None    # outcome of the most recent self-review
 
     # ---- capital cap -----------------------------------------------------
     def effective_funds(self, account: dict, positions: list[dict]) -> tuple[float, float, float]:
@@ -236,6 +240,12 @@ class Engine:
         if jrn:
             lines.append(jrn)
 
+        # Rules the bot wrote for itself, from reviewing its own results.
+        self._playbook = playbook.load()
+        psum = playbook.summarize(self._playbook)
+        if psum:
+            lines.append(psum)
+
         # The bot's own record. It has no memory between cycles, so this is the
         # only way it can see whether its process has actually been working.
         if self.cfg.enable_scorecard:
@@ -383,7 +393,10 @@ class Engine:
         for order in orders:
             symbol = str(order.get("symbol", "")).upper()
             side = str(order.get("side", "")).lower()
-            notional = round(abs(_f(order.get("notional_usd"))), 2)
+            # NOT abs(): a negative notional is a malformed order, and
+            # silently flipping its sign turns a model slip into a real trade.
+            raw_notional = _f(order.get("notional_usd"))
+            notional = round(raw_notional, 2)
             o = {
                 "symbol": symbol,
                 "side": side,
@@ -407,7 +420,7 @@ class Engine:
                 reject(f"invalid side '{side}'")
                 continue
             if notional <= 0:
-                reject("non-positive notional")
+                reject(f"non-positive notional ({raw_notional})")
                 continue
             if side == "buy" and symbol not in self.cfg.watchlist:
                 reject("buy not on watchlist")
@@ -611,6 +624,8 @@ class Engine:
             "correlation": self._correlation,
             "regime": self._regime,
             "projection": self._projection,
+            "playbook": self._playbook,
+            "evolution": self._evolution,
             "scorecard": self._scorecard,
             "volatility": self._vols,
             "fundamentals": self._last_scan,
@@ -726,6 +741,68 @@ class Engine:
             return []
         prices = {p["symbol"]: _f(p.get("current_price")) for p in positions_before}
         return scorecard.record_closures(theses, held_now, prices)
+
+    def _maybe_evolve(self) -> float:
+        """Let the bot rewrite its own playbook, if there is new evidence.
+
+        Runs only after positions have closed, because closures are the only
+        thing that adds evidence - re-reviewing the same record would just
+        re-roll the dice on the same data until it produced a rule.
+
+        Returns the AI cost of the review, so it lands in the same ledger as
+        every other call rather than being quietly free.
+        """
+        if not self.cfg.enable_evolution:
+            return 0.0
+        stats = scorecard.stats()
+        pb = playbook.load()
+        due, why = self.reviewer.due(stats, pb)
+        if not due:
+            print(f"[evolve] not due: {why}")
+            return 0.0
+
+        print(f"[evolve] reviewing own record - {why}")
+        proposal = self.reviewer.review(
+            stats, pb,
+            journal=recent_journal(10),
+            bench=benchmark.summarize(self._benchmark, self._correlation),
+        )
+        cost = self.reviewer.last_cost
+        if not proposal:
+            return cost
+
+        baseline = {
+            "win_rate": (stats.get("overall") or {}).get("win_rate"),
+            "avg_return_pct": (stats.get("overall") or {}).get("avg_return_pct"),
+            "trades": stats.get("total", 0),
+        }
+        result = playbook.apply_changes(
+            pb,
+            add=proposal.get("add_rules") or [],
+            retire=proposal.get("retire_rule_ids") or [],
+            baseline=baseline,
+            trades_seen=stats.get("total", 0),
+        )
+        self._playbook = playbook.load()
+        self._evolution = {
+            "at": datetime.now(timezone.utc).isoformat(),
+            "assessment": proposal.get("assessment", ""),
+            "confidence": _f(proposal.get("confidence")),
+            "trades_reviewed": stats.get("total", 0),
+            "added": result["added"],
+            "retired": result["retired"],
+            # Surfaced rather than swallowed: a model repeatedly trying to reach
+            # past the strategy layer is worth seeing.
+            "rejected": result["rejected"],
+            "cost": cost,
+            "version": self._playbook.get("version"),
+        }
+        print(f"[evolve] playbook v{self._playbook.get('version')}: "
+              f"+{len(result['added'])} rules, -{len(result['retired'])}, "
+              f"{len(result['rejected'])} rejected (${cost:.3f})")
+        for r in result["rejected"]:
+            print(f"[evolve]   REJECTED: {r['reason']}")
+        return cost
 
     def _update_ledger(self, account: dict, cost: float) -> dict:
         """Add this cycle's AI cost, stamping the baseline on the first run.
@@ -863,11 +940,15 @@ class Engine:
                 r = f"{c['return_pct']:+.1f}%" if c.get("return_pct") is not None else "n/a"
                 print(f"[engine] closed {c['symbol']}: {r} ({c['outcome']})")
         theses = prune(theses, held_now)
+
+        # New closures are the only thing that adds evidence, so this is the
+        # one place a self-review can learn something it did not already know.
+        evolve_cost = self._maybe_evolve() if closed else 0.0
         save_theses(theses)
         self._theses = theses
 
         # AI operating cost for this cycle, and the running P&L-vs-cost ledger.
-        cycle_cost = (triage_cost + self._scout_cost
+        cycle_cost = (triage_cost + self._scout_cost + evolve_cost
                       + self.brain.run_cost + self.auditor.last_cost)
         ledger = self._update_ledger(account, cycle_cost)
         print(f"[engine] AI cost this cycle=${cycle_cost:.4f} "
